@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>德州保险计算器测试</title>
+    <style>body{font:16px system-ui,sans-serif;max-width:760px;margin:32px auto;padding:0 16px}li{margin:8px 0}.ok{color:#16803c}.fail{color:#b42318}code{font-family:ui-monospace,monospace}</style>
+  </head>
+  <body>
+    <h1>核心计算测试</h1>
+    <p id="summary">测试中…</p>
+    <ol id="results"></ol>
+    <script src="poker-core.js?v=81"></script>
+    <script src="app-hand-analysis.js?v=81"></script>
+    <script>
+      const results = document.querySelector("#results");
+      const cases = [];
+      const test = (name, fn) => cases.push({ name, fn });
+      const equal = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
+
+      test("牌面分析模块已独立加载", () => typeof PokerAppHandAnalysis?.calculateHandOuts === "function");
+      test("河牌五张公共牌直接结算 equity", () => {
+        const result = PokerAppHandAnalysis.calculateFinalEquities(
+          ["As", "Kd", "Qc", "Jh", "2s"],
+          [{ key: "A", cards: ["Tc", "Td"] }, { key: "B", cards: ["3c", "3d"] }]
+        );
+        return result.A === 1 && result.B === 0;
+      });
+      test("赔率 9 outs = 2.8x", () => PokerCore.oddsForOuts(9) === 2.8);
+      test("0 outs 不提供赔率", () => PokerCore.oddsForOuts(0) === 0);
+      test("17 outs = 1.2x", () => PokerCore.oddsForOuts(17) === 1.2);
+      test("outs 整数输入通过", () => PokerCore.parseOuts("9").valid === true);
+      test("小数 outs 被拒绝", () => PokerCore.parseOuts("9.5").valid === false);
+      test("负数 outs 被拒绝", () => PokerCore.parseOuts("-1").valid === false);
+      test("非数字 outs 被拒绝", () => PokerCore.parseOuts("abc").valid === false);
+      test("18 outs 被拒绝", () => PokerCore.parseOuts("18").valid === false);
+      test("金额允许非负小数", () => PokerCore.numericStringIsValid("12.5") && !PokerCore.numericStringIsValid("-1"));
+      test("牌面解析严格且会统一大小写", () => PokerCore.parseCard("ZZ") === null && PokerCore.parseCard("Asx") === null && PokerCore.parseCard("As ") === null && PokerCore.parseCard("aS")?.value === "As");
+      test("重复牌状态会被拒绝", () => PokerCore.prepareCardState(
+        ["As", "As", "Kh"],
+        [{ key: "A", cards: ["Qc", "Qd"] }]
+      ) === null);
+      test("非法手牌分析返回不可用结果而不抛异常", () => {
+        const result = PokerAppHandAnalysis.calculateHandOuts(
+          ["Asx", "Kd", "Qc"],
+          [{ key: "A", cards: ["Jh", "Ts"] }]
+        );
+        return result.valid === false && result.stats.A.currentStatus === "不可用";
+      });
+      test("四人边池层级正确", () => {
+        const side = PokerCore.buildSidePots({ A: 500, B: 300, C: 200, D: 250 });
+        return equal(side.pots.map((pot) => pot.amount), [800, 150, 100]) && side.returned === 200;
+      });
+      test("唯一最高投入的退回不计入实际入池", () => {
+        const contributions = { A: 150, B: 100, C: 50, D: 0 };
+        const side = PokerCore.buildSidePots(contributions);
+        const effective = PokerCore.sideEffectiveStakes(contributions, side.highest, side.returned);
+        return equal(side.pots.map((pot) => pot.amount), [150, 100])
+          && side.returned === 50
+          && equal(effective, { A: 100, B: 100, C: 50, D: 0 });
+      });
+      test("C 领先主池、A 领先两层边池", () => {
+        const side = PokerCore.buildSidePots({ A: 500, B: 300, C: 200, D: 250 });
+        const coverage = PokerCore.sideCoverageByPlayer(side.pots, { A: 2, B: 3, C: 1, D: 4 });
+        return equal(coverage, { A: 250, B: 0, C: 800, D: 0 });
+      });
+      test("多人平局按池均分可争夺金额", () => {
+        const side = PokerCore.buildSidePots({ A: 500, B: 300, C: 200, D: 250 });
+        const coverage = PokerCore.sideCoverageByPlayer(side.pots, { A: 1, B: 1, C: 2, D: 3 });
+        return equal(coverage, { A: 525, B: 525, C: 0, D: 0 });
+      });
+      test("Call 赔率：160 底池跟 80 = 33.3%", () => {
+        const result = PokerCore.calculateCallMetrics({ potBeforeCall: 160, callAmount: 80, outs: 9, unknownCards: 47, cardsToCome: 2 });
+        return Math.abs(result.potOdds - 1 / 3) < 0.000001 && result.potAfterCall === 240;
+      });
+      test("翻牌 9 outs 精确概率", () => {
+        const result = PokerCore.callProbability(9, 47, 2);
+        return Math.abs(result.next - 9 / 47) < 0.000001 && result.byRiver > 0.34 && result.byRiver < 0.36;
+      });
+      test("转牌只计算下一张牌", () => {
+        const result = PokerCore.callProbability(9, 46, 1);
+        return result.next === result.byRiver && Math.abs(result.next - 9 / 46) < 0.000001;
+      });
+      test("Call 结论覆盖值得跟、临界和不建议", () => {
+        const good = PokerCore.calculateCallMetrics({ potBeforeCall: 160, callAmount: 80, outs: 17, unknownCards: 47, cardsToCome: 1 });
+        const even = PokerCore.calculateCallMetrics({ potBeforeCall: 160, callAmount: 80, equity: 1 / 3, outs: 0, unknownCards: 47, cardsToCome: 1 });
+        const bad = PokerCore.calculateCallMetrics({ potBeforeCall: 160, callAmount: 80, outs: 0, unknownCards: 47, cardsToCome: 1 });
+        return good.decision === "call" && even.decision === "borderline" && bad.decision === "fold";
+      });
+      test("Call outs 47 上限和非法输入", () => PokerCore.parseCallOuts("47").valid && !PokerCore.parseCallOuts("48").valid && !PokerCore.parseCallOuts("9.5").valid);
+      test("自动 equity 使用实际未知牌数量", () => {
+        const result = PokerCore.calculateCallEquity(
+          ["2c", "3d", "4h"],
+          [{ key: "A", cards: ["As", "5s"] }, { key: "B", cards: ["Kh", "Kd"] }],
+          "A"
+        );
+        return result && result.remainingCount === 45 && result.winCards.length + result.tieCards.length + result.lossCards.length === 45;
+      });
+      test("自动 equity 将平局计入分池权益", () => {
+        const result = PokerCore.calculateCallEquity(
+          ["2c", "2d", "7h"],
+          [{ key: "A", cards: ["As", "Kd"] }, { key: "B", cards: ["Ah", "Ks"] }],
+          "A"
+        );
+        return result && result.tieCards.length > 0 && result.nextEquity > 0 && result.nextEquity < 1;
+      });
+      test("未知对手可用随机一手估算", () => {
+        const result = PokerCore.calculateCallEquity(
+          ["2c", "3d", "4h", "5s", "9c"],
+          [{ key: "A", cards: ["As", "Kd"] }],
+          "A"
+        );
+        return result && result.mode === "random-opponent" && result.sampleCount > 0 && result.nextEquity >= 0 && result.nextEquity <= 1;
+      });
+      test("多人未知座位不会退化成单一随机对手", () => {
+        const result = PokerCore.calculateCallEquity(
+          ["2c", "3d", "4h", "5s", "9c"],
+          [
+            { key: "A", cards: ["As", "Kd"] },
+            { key: "B", cards: [] },
+            { key: "C", cards: [] }
+          ],
+          "A",
+          { unknownOpponentCount: 2, seatCount: 3 }
+        );
+        return result && result.unknownOpponentCount === 2 && result.knownOpponentCount === 0
+          && result.opponentCount === 2 && result.seatCount === 3 && result.sampleCount > 0;
+      });
+      test("已知对手和未知座位可以同时计算", () => {
+        const result = PokerCore.calculateCallEquity(
+          ["2c", "3d", "4h", "5s", "9c"],
+          [
+            { key: "A", cards: ["As", "Kd"] },
+            { key: "B", cards: ["Qh", "Jd"] },
+            { key: "C", cards: [] }
+          ],
+          "A",
+          { seatCount: 3 }
+        );
+        return result && result.unknownOpponentCount === 1 && result.knownOpponentCount === 1
+          && result.opponentCount === 2 && result.sampleCount > 0;
+      });
+
+      let passed = 0;
+      cases.forEach(({ name, fn }) => {
+        const item = document.createElement("li");
+        try {
+          if (!fn()) throw new Error("断言失败");
+          item.className = "ok";
+          item.textContent = `通过：${name}`;
+          passed += 1;
+        } catch (error) {
+          item.className = "fail";
+          item.textContent = `失败：${name}（${error.message}）`;
+        }
+        results.append(item);
+      });
+      document.querySelector("#summary").textContent = `${passed} / ${cases.length} 项通过`;
+    </script>
+  </body>
+</html>

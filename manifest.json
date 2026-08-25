@@ -1,0 +1,28 @@
+{
+  "name": "德州保险盈利计算器",
+  "short_name": "德州保险",
+  "id": "./",
+  "version": "81",
+  "description": "计算德州扑克牌局中单次或两次保险的净收益，支持主池、边池和牌面自动分析。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#081a16",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    {
+      "src": "icons/icon-180-v38.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512-v38.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
