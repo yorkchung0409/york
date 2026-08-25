@@ -221,6 +221,7 @@ h3 { margin: 0; font-family: "Noto Sans SC", sans-serif; font-size: 17px; line-h
 .side-buy-hint { color: var(--muted-2); font-size: 8px; font-weight: 400; }
 .side-pot-stage-grid .input-wrap input, .side-pot-stage-grid .side-outs-wrap input { font-size: 12px; padding-top: 7px; padding-bottom: 7px; }
 .side-pot-stage-grid .side-outs-wrap strong { font-size: 10px; }
+.side-pot-stage-status { margin: 7px 0 0; color: var(--muted-2); font-size: 9px; line-height: 1.35; }
 .side-pot-quick-values { display: flex; align-items: center; gap: 5px; margin-top: 7px; flex-wrap: wrap; color: var(--muted-2); font-size: 9px; }
 .side-pot-quick-values button { min-width: 34px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 5px; color: var(--muted); background: rgba(3,18,13,.36); font-size: 9px; }
 .side-pot-quick-values button:hover { color: var(--bg-deep); border-color: var(--lime); background: var(--lime); }
@@ -274,6 +275,52 @@ body.call-mode-active .hand-analysis-results { display: none; }
 body.call-mode-active .hand-action-row { display: none; }
 body.pool-mode-side .base-input-panel { display: none; }
 .is-hidden { display: none !important; }
+
+/* The insurance UI is a single workspace. Keep the old mode hooks alive for
+   app.js while allowing its legacy is-hidden toggles to leave this view open. */
+.legacy-mode-button,
+.legacy-single-workspace,
+.legacy-advance-control { display: none !important; }
+.unified-insurance-workspace { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(0, 1.35fr); align-items: start; gap: 18px; }
+.unified-insurance-workspace.is-hidden { display: grid !important; }
+body.call-mode-active .unified-insurance-workspace,
+body.pool-mode-side .unified-insurance-workspace { display: none !important; }
+.insurance-control-column,
+.insurance-result-column { display: grid; gap: 16px; min-width: 0; }
+.unified-base-panel { padding: 20px; }
+.unified-base-panel .field-grid { margin-top: 16px; }
+.insurance-status-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+.insurance-status-rail > div { min-width: 0; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; background: rgba(2, 19, 14, .28); }
+.insurance-status-rail span { display: block; overflow: hidden; color: var(--muted-2); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.insurance-status-rail strong { display: block; margin-top: 4px; overflow: hidden; color: var(--green); font-size: 11px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.insurance-status-rail > div:first-child { border-color: rgba(247, 201, 107, .27); background: rgba(247, 201, 107, .06); }
+.insurance-status-rail > div:first-child strong { color: var(--gold); }
+.insurance-stage-panel { grid-column: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; padding: 15px; }
+.insurance-stage-panel .double-stages-heading { margin-bottom: 1px; }
+.insurance-stage-card { min-width: 0; padding: 17px; box-shadow: 0 14px 30px rgba(0, 0, 0, .15); }
+.insurance-stage-card .stage-note { min-height: 31px; }
+.insurance-stage-card .odds-scale { margin-top: 13px; }
+.insurance-stage-card .stage-buy-field { margin-top: 13px; }
+.insurance-stage-card .ratio-quick-values { margin-top: 9px; }
+.insurance-stage-card .stage-payout { margin-top: 11px; }
+.insurance-stage-card.double-river-stage.is-locked::after { display: none; }
+.insurance-stage-card.double-river-stage.is-locked > * { position: static; z-index: auto; }
+.insurance-stage-card.double-river-stage.is-locked .odds-scale,
+.insurance-stage-card.double-river-stage.is-locked .odds-range,
+.insurance-stage-card.double-river-stage.is-locked .stage-buy-field,
+.insurance-stage-card.double-river-stage.is-locked .ratio-quick-values,
+.insurance-stage-card.double-river-stage.is-locked .stage-payout { opacity: 1; }
+.insurance-summary-panel { min-width: 0; }
+.insurance-outcome-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.insurance-ev-block { margin-top: 13px; padding: 13px 0 0; }
+.settlement-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); }
+.settlement-overview-grid > div { min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(2, 19, 14, .3); }
+.settlement-overview-grid span { display: block; overflow: hidden; color: var(--muted-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.settlement-overview-grid strong { display: block; margin-top: 5px; overflow: hidden; color: var(--green); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.settlement-overview-grid > div:nth-child(2) strong { color: #ffc2ad; }
+.settlement-overview-grid > div:nth-child(3) strong { color: var(--lime); }
+.settlement-overview-grid > div:nth-child(4) strong { color: var(--gold); }
+.insurance-result-column .table-panel { min-width: 0; }
 .workspace-grid { display: grid; grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.45fr); align-items: start; gap: 20px; }
 .double-workspace { grid-template-columns: minmax(0, 1fr); }
 .double-workspace .control-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
@@ -576,6 +623,24 @@ tbody tr.custom-row { background: rgba(247,201,107,0.06); }
   .control-column { display: grid; grid-template-columns: 1fr; }
   .double-workspace .control-column { grid-template-columns: 1fr; }
   .double-workspace .control-column > .inputs-panel { grid-column: auto; }
+  .unified-insurance-workspace { grid-template-columns: 1fr; gap: 12px; }
+  .settlement-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insurance-control-column, .insurance-result-column { gap: 12px; }
+  .unified-base-panel { padding: 14px; }
+  .insurance-status-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 11px; padding-top: 10px; }
+  .insurance-status-rail > div { padding: 7px; }
+  .insurance-status-rail > div:last-child { grid-column: 1 / -1; }
+  .insurance-status-rail strong { font-size: 10px; }
+  .insurance-stage-panel { grid-template-columns: 1fr; gap: 9px; padding: 10px; }
+  .insurance-stage-card { padding: 13px; }
+  .insurance-stage-card .stage-note { min-height: 0; }
+  .insurance-outcome-grid { grid-template-columns: 1fr; gap: 6px; }
+  .insurance-outcome-grid .probability-stat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 9px; align-items: center; }
+  .insurance-outcome-grid .probability-stat-top { display: contents; }
+  .insurance-outcome-grid .probability-stat-top span { grid-column: 1; }
+  .insurance-outcome-grid .probability-stat-top strong { grid-column: 2; grid-row: 1 / span 2; margin: 0; font-size: 17px; text-align: right; }
+  .insurance-outcome-grid .probability-meter { grid-column: 1; margin-top: 4px; }
+  .insurance-outcome-grid .probability-stat small { grid-column: 1; margin-top: 0; }
   .call-grid { grid-template-columns: 1fr; gap: 12px; }
   .call-input-panel, .call-result-panel { padding: 14px; }
   .call-source-selector { margin-top: 12px; }

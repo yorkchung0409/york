@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=81" />
+    <link rel="stylesheet" href="styles.css?v=88" />
   </head>
   <body>
     <main class="app-shell">
@@ -33,16 +33,16 @@
         <span>爆保险时，买入本金不扣除，按赔率直接赔付</span>
       </div>
 
-      <div class="mode-selector" role="tablist" aria-label="保险次数">
-        <button class="mode-button is-active" id="singleModeButton" type="button" role="tab" aria-selected="true" data-mode="single">一次保险</button>
-        <button class="mode-button" id="doubleModeButton" type="button" role="tab" aria-selected="false" data-mode="double">两次保险</button>
-        <button class="mode-button" id="callModeButton" type="button" role="tab" aria-selected="false" data-mode="call">胜率和赔率</button>
+      <div class="mode-selector" role="tablist" aria-label="工具模式">
+        <button class="mode-button is-active insurance-mode-button" id="singleModeButton" type="button" role="tab" aria-selected="true" data-mode="single">保险</button>
+        <button class="mode-button legacy-mode-button" id="doubleModeButton" type="button" role="tab" aria-selected="false" data-mode="double" tabindex="-1" aria-hidden="true">两次保险</button>
+        <button class="mode-button call-mode-button" id="callModeButton" type="button" role="tab" aria-selected="false" data-mode="call">胜率和赔率</button>
       </div>
 
-      <div class="pool-mode-row" role="group" aria-label="底池来源">
-        <span>底池来源</span>
+      <div class="pool-mode-row" role="group" aria-label="保险底池类型">
+        <span>保险底池</span>
         <button class="pool-mode-button is-active" type="button" data-pool-mode="single">单一底池</button>
-        <button class="pool-mode-button" type="button" data-pool-mode="side">主池 / 边池</button>
+        <button class="pool-mode-button" type="button" data-pool-mode="side">多人底池</button>
       </div>
 
       <section class="panel hand-panel" id="handPanel" aria-labelledby="handPanelTitle">
@@ -148,295 +148,162 @@
         </div>
       </section>
 
-      <section class="workspace-grid mode-workspace" id="singleWorkspace" data-workspace="single">
-        <div class="control-column">
-          <article class="panel odds-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="section-kicker">步骤 1</p>
-                <h3>选择 outs 赔率</h3>
-              </div>
-              <div class="odds-readout">
-                <strong id="oddsValue">2.8x</strong>
-              </div>
-            </div>
-            <div class="odds-scale" id="oddsScale" aria-label="按 outs 选择赔率"></div>
-            <input class="odds-range" id="outsRange" type="range" min="0" max="17" step="1" value="9" aria-label="outs 张数" />
-            <div class="range-caption">
-              <span>0 张</span>
-              <span>17 张</span>
-            </div>
-            <div class="odds-helper">
-              <span>当前赔率</span>
-              <span class="helper-value" id="oddsHint">每买 100，爆保险赔 280</span>
-            </div>
-          </article>
-
-          <article class="panel inputs-panel base-input-panel" id="singleBaseInputPanel">
+      <section class="workspace-grid mode-workspace unified-insurance-workspace" id="doubleWorkspace" data-workspace="insurance" aria-labelledby="insuranceWorkspaceTitle">
+        <div class="insurance-control-column">
+          <article class="panel inputs-panel base-input-panel unified-base-panel" id="doubleBaseInputPanel">
             <div class="panel-heading compact-heading">
               <div>
-                <p class="section-kicker">底池与投入</p>
+                <p class="section-kicker">保险方案</p>
+                <h3 id="insuranceWorkspaceTitle">统一保险工作区</h3>
               </div>
-              <span class="currency-badge">人民币</span>
+              <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
             </div>
             <div class="field-grid">
               <label class="field">
                 <span>底池大小</span>
                 <div class="input-wrap">
-                  <input id="potInput" type="number" inputmode="decimal" min="0" step="1" />
+                  <input id="doublePotInput" type="number" inputmode="decimal" min="0" step="1" placeholder="例如 1000" />
                   <span>¥</span>
                 </div>
               </label>
               <label class="field">
                 <span>个人主池投入</span>
                 <div class="input-wrap">
-                  <input id="stakeInput" type="number" inputmode="decimal" min="0" step="1" />
+                  <input id="doubleStakeInput" type="number" inputmode="decimal" min="0" step="1" placeholder="例如 500" />
                   <span>¥</span>
                 </div>
               </label>
             </div>
-          </article>
-
-          <article class="panel custom-panel">
-            <div class="panel-heading compact-heading">
-              <div>
-                <p class="section-kicker">自定义买入</p>
-                <h3>试算自定义买入</h3>
-              </div>
-              <span class="mini-label">手动输入</span>
-            </div>
-            <div class="custom-form-row">
-              <label class="field custom-field">
-                <span>保险买入</span>
-                <div class="input-wrap">
-                  <input id="customBuyInput" type="number" inputmode="decimal" min="0" step="1" />
-                  <span>¥</span>
-                </div>
-              </label>
-              <div class="custom-result" aria-live="polite">
-                <span>爆了可收</span>
-                <strong id="customPayout">¥280</strong>
-              </div>
-            </div>
-            <div class="ratio-quick-values single-ratio-quick-values" aria-label="一次保险常用买入比例">
-              <span>常用比例</span>
-              <button type="button" data-single-ratio="1">100%</button>
-              <button type="button" data-single-ratio="0.85">85%</button>
-              <button type="button" data-single-ratio="0.75">75%</button>
-              <button type="button" data-single-ratio="0.6">60%</button>
-              <button type="button" data-single-ratio="0.5">50%</button>
-            </div>
-            <p class="custom-buy-note">100% 档位按当前赔率计算可买上限，超过上限的输入会自动提示并截断。</p>
-          </article>
-        </div>
-
-        <div class="result-column">
-          <article class="panel summary-panel">
-            <div class="summary-topline">
-              <div>
-                <p class="section-kicker">牌局概览</p>
-                <h3>当前牌局概览</h3>
-              </div>
-              <div class="summary-odds"><span id="summaryOuts">9</span> outs · <strong id="summaryOdds">2.8x</strong></div>
-            </div>
-            <div class="summary-stats">
-              <div class="summary-stat" id="summaryHitStat">
-                <span>爆保险净盈亏</span>
-                <strong id="hitNetValue">−¥120</strong>
-                <small>保险赔付 − 个人投入</small>
-              </div>
-              <div class="summary-stat accent-stat">
-                <span>自定义买入</span>
-                <strong id="customBuyValue">¥100</strong>
-                <small>当前保险投入</small>
-              </div>
-              <div class="summary-stat" id="summarySafeStat">
-                <span>不爆保险盈亏</span>
-                <strong id="safeNetValue">+¥500</strong>
-                <small>底池 − 个人投入 − 买入</small>
-              </div>
+            <div class="insurance-status-rail" aria-live="polite">
+              <div><span>当前状态</span><strong id="insuranceStatus">先填写底池与投入</strong></div>
+              <div><span>结算街道</span><strong id="insuranceStreetStatus">转牌 + 河牌</strong></div>
+              <div><span>买入口径</span><strong>爆保险不扣本金</strong></div>
             </div>
           </article>
 
-          <article class="panel table-panel">
-            <div class="table-heading">
-              <div>
-                <p class="section-kicker">步骤 3</p>
-                <h3>保险买入与净收益</h3>
-              </div>
-              <span class="table-note">买入 = 底池 × 比例 ÷ 赔率</span>
-            </div>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">买入比例</th>
-                    <th scope="col">买入金额</th>
-                    <th scope="col"><span class="th-dot safe-dot"></span>不爆保险</th>
-                    <th scope="col"><span class="th-dot hit-dot"></span>爆保险</th>
-                  </tr>
-                </thead>
-                <tbody id="resultRows"></tbody>
-              </table>
-            </div>
-            <div class="table-footnote">
-              <span class="legend-item"><span class="legend-swatch safe-swatch"></span>不爆：赢下底池，扣除保险买入</span>
-              <span class="legend-item"><span class="legend-swatch hit-swatch"></span>爆：输掉底池，保险按赔率赔付，买入本金不扣</span>
-            </div>
-          </article>
-
-          <article class="formula-strip">
-            <div class="formula-icon" aria-hidden="true">ƒx</div>
-            <div>
-              <strong>计算口径</strong>
-              <p>不爆净收益 = 底池 − 个人投入 − 买入；爆保险净收益 = 保险赔付 − 个人投入。</p>
-            </div>
-            <button class="copy-button" id="copyButton" type="button" title="复制当前计算结果">复制结果</button>
-          </article>
-          <p class="disclaimer">仅用于牌局测算，不代表实际赔率或任何投资建议。</p>
-        </div>
-      </section>
-      <section class="workspace-grid mode-workspace double-workspace is-hidden" id="doubleWorkspace" data-workspace="double" aria-label="底池与投入">
-        <div class="control-column">
-          <article class="panel inputs-panel base-input-panel" id="doubleBaseInputPanel">
-            <div class="panel-heading compact-heading">
-              <div>
-                <p class="section-kicker">底池与投入</p>
-              </div>
-              <span class="currency-badge">人民币</span>
-            </div>
-            <div class="field-grid">
-              <label class="field">
-                <span>底池大小</span>
-                <div class="input-wrap">
-                <input id="doublePotInput" type="number" inputmode="decimal" min="0" step="1" />
-                  <span>¥</span>
-                </div>
-              </label>
-              <label class="field">
-                <span>个人主池投入</span>
-                <div class="input-wrap">
-                <input id="doubleStakeInput" type="number" inputmode="decimal" min="0" step="1" />
-                  <span>¥</span>
-                </div>
-              </label>
-            </div>
-          </article>
-
-          <div class="double-stages-panel">
+          <div class="double-stages-panel insurance-stage-panel" id="insuranceStreetConfig">
             <div class="double-stages-heading">
               <div>
-                <p class="section-kicker">步骤 2</p>
-                <h3>转牌 + 河牌两次保险</h3>
+                <p class="section-kicker">保险配置</p>
+                <h3>转牌 / 河牌</h3>
               </div>
-              <span>转牌爆后不再购买河牌保险</span>
+              <span>两张卡常显，可同时比较两街方案</span>
             </div>
-          <article class="panel stage-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="section-kicker">步骤 1 · 转牌</p>
-                <h3>转牌保险</h3>
+            <article class="panel stage-panel insurance-stage-card" id="turnStagePanel">
+              <div class="panel-heading">
+                <div>
+                  <p class="section-kicker">转牌</p>
+                  <h3>转牌保险</h3>
+                </div>
+                <div class="odds-readout">
+                  <strong id="turnOddsValue">2.8x</strong>
+                  <span>赔率</span>
+                </div>
               </div>
-              <div class="odds-readout">
-                <strong id="turnOddsValue">2.8x</strong>
+              <p class="stage-note" id="turnStageNote">填写转牌 outs，查看当前赔率与建议买入</p>
+              <div class="odds-scale" id="turnOddsScale" aria-label="按转牌 outs 选择赔率"></div>
+              <input class="odds-range" id="turnOutsRange" type="range" min="0" max="17" step="1" value="9" aria-label="转牌 outs 张数" />
+              <div class="range-caption"><span>0 张</span><span>17 张</span></div>
+              <label class="field stage-buy-field">
+                <span>转牌保险买入</span>
+                <div class="input-wrap"><input id="turnBuyInput" type="number" inputmode="decimal" min="0" step="1" placeholder="自动建议" /><span>¥</span></div>
+              </label>
+              <div class="ratio-quick-values" aria-label="转牌常用买入比例">
+                <span>常用比例</span>
+                <button type="button" data-turn-ratio="1">100%</button>
+                <button type="button" data-turn-ratio="0.85">85%</button>
+                <button type="button" data-turn-ratio="0.75">75%</button>
+                <button type="button" data-turn-ratio="0.6">60%</button>
+                <button type="button" data-turn-ratio="0.5">50%</button>
               </div>
-            </div>
-            <div class="odds-scale" id="turnOddsScale" aria-label="按转牌 outs 选择赔率"></div>
-            <input class="odds-range" id="turnOutsRange" type="range" min="0" max="17" step="1" value="9" aria-label="转牌 outs 张数" />
-            <div class="range-caption"><span>0 张</span><span>17 张</span></div>
-            <label class="field stage-buy-field">
-              <span>转牌保险买入</span>
-                <div class="input-wrap"><input id="turnBuyInput" type="number" inputmode="decimal" min="0" step="1" /><span>¥</span></div>
-            </label>
-            <div class="ratio-quick-values" aria-label="转牌常用买入比例">
-              <span>常用比例</span>
-              <button type="button" data-turn-ratio="1">100%</button>
-              <button type="button" data-turn-ratio="0.85">85%</button>
-              <button type="button" data-turn-ratio="0.75">75%</button>
-              <button type="button" data-turn-ratio="0.6">60%</button>
-              <button type="button" data-turn-ratio="0.5">50%</button>
-            </div>
-            <div class="stage-payout"><span>转牌爆保险可收</span><strong id="turnPayoutValue">¥280</strong></div>
-          </article>
+              <div class="stage-payout"><span>转牌爆保险可收</span><strong id="turnPayoutValue">—</strong></div>
+            </article>
 
-          <article class="panel stage-panel double-river-stage is-locked" id="riverStagePanel">
-            <div class="panel-heading">
-              <div>
-                <p class="section-kicker">步骤 2 · 河牌</p>
-                <h3>河牌保险</h3>
+            <article class="panel stage-panel double-river-stage insurance-stage-card" id="riverStagePanel">
+              <div class="panel-heading">
+                <div>
+                  <p class="section-kicker">河牌</p>
+                  <h3>河牌保险</h3>
+                </div>
+                <div class="odds-readout">
+                  <strong id="riverOddsValue">3.5x</strong>
+                  <span>赔率</span>
+                </div>
               </div>
-              <div class="odds-readout">
-                <strong id="riverOddsValue">3.5x</strong>
+              <p class="stage-note" id="riverStageNote">河牌配置常显，按转牌未爆后的实际牌面填写 outs</p>
+              <button class="stage-advance-button legacy-advance-control" id="doubleRiverAdvance" type="button" hidden aria-hidden="true">转牌未爆，进入河牌</button>
+              <div class="odds-scale" id="riverOddsScale" aria-label="按河牌 outs 选择赔率"></div>
+              <input class="odds-range" id="riverOutsRange" type="range" min="0" max="17" step="1" value="8" aria-label="河牌 outs 张数" />
+              <div class="range-caption"><span>0 张</span><span>17 张</span></div>
+              <label class="field stage-buy-field">
+                <span>河牌保险买入</span>
+                <div class="input-wrap"><input id="riverBuyInput" type="number" inputmode="decimal" min="0" step="1" placeholder="自动建议" /><span>¥</span></div>
+              </label>
+              <div class="ratio-quick-values" aria-label="河牌常用买入比例">
+                <span>常用比例</span>
+                <button type="button" data-river-ratio="1">100%</button>
+                <button type="button" data-river-ratio="0.85">85%</button>
+                <button type="button" data-river-ratio="0.75">75%</button>
+                <button type="button" data-river-ratio="0.6">60%</button>
+                <button type="button" data-river-ratio="0.5">50%</button>
               </div>
-            </div>
-            <p class="stage-note" id="riverStageNote">转牌未爆后，填写实际河牌 outs</p>
-            <button class="stage-advance-button" id="doubleRiverAdvance" type="button">转牌未爆，进入河牌</button>
-            <div class="odds-scale" id="riverOddsScale" aria-label="按河牌 outs 选择赔率"></div>
-            <input class="odds-range" id="riverOutsRange" type="range" min="0" max="17" step="1" value="8" aria-label="河牌 outs 张数" />
-            <div class="range-caption"><span>0 张</span><span>17 张</span></div>
-            <label class="field stage-buy-field">
-              <span>河牌保险买入</span>
-                <div class="input-wrap"><input id="riverBuyInput" type="number" inputmode="decimal" min="0" step="1" /><span>¥</span></div>
-            </label>
-            <div class="ratio-quick-values" aria-label="河牌常用买入比例">
-              <span>常用比例</span>
-              <button type="button" data-river-ratio="1">100%</button>
-              <button type="button" data-river-ratio="0.85">85%</button>
-              <button type="button" data-river-ratio="0.75">75%</button>
-              <button type="button" data-river-ratio="0.6">60%</button>
-              <button type="button" data-river-ratio="0.5">50%</button>
-            </div>
-            <div class="stage-payout"><span>河牌爆保险可收</span><strong id="riverPayoutValue">¥280</strong></div>
-          </article>
+              <div class="stage-payout"><span>河牌爆保险可收</span><strong id="riverPayoutValue">—</strong></div>
+            </article>
           </div>
         </div>
 
-        <div class="result-column">
-          <article class="panel summary-panel">
+        <div class="result-column insurance-result-column">
+          <article class="panel summary-panel insurance-summary-panel">
             <div class="summary-topline">
               <div>
-                <p class="section-kicker">两次保险结果</p>
-                <h3>两次保险结果</h3>
+                <p class="section-kicker">结果预览</p>
+                <h3>三种结果与期望收益</h3>
               </div>
               <div class="summary-odds" id="doubleSummaryOdds">转牌 9 outs · 河牌 8 outs</div>
             </div>
-            <div class="summary-probability-grid">
+            <div class="summary-probability-grid insurance-outcome-grid">
               <div class="probability-stat">
-                <div class="probability-stat-top"><span>转牌爆</span><strong id="doubleTurnProbability">19.1%</strong></div>
+                <div class="probability-stat-top"><span>转牌爆</span><strong id="doubleTurnProbability">—</strong></div>
                 <div class="probability-meter"><span id="doubleTurnMeter"></span></div>
                 <small>命中后结束保险</small>
               </div>
               <div class="probability-stat probability-stat-accent">
-                <div class="probability-stat-top"><span>河牌爆</span><strong id="doubleRiverProbability">14.1%</strong></div>
+                <div class="probability-stat-top"><span>河牌爆</span><strong id="doubleRiverProbability">—</strong></div>
                 <div class="probability-meter"><span id="doubleRiverMeter"></span></div>
                 <small>转牌安全后进入</small>
               </div>
               <div class="probability-stat">
-                <div class="probability-stat-top"><span>两街安全</span><strong id="doubleBothSafeProbability">66.8%</strong></div>
+                <div class="probability-stat-top"><span>两街安全</span><strong id="doubleBothSafeProbability">—</strong></div>
                 <div class="probability-meter"><span id="doubleBothSafeMeter"></span></div>
-                <small>两次保险都不爆</small>
+                <small>转牌、河牌都不爆</small>
               </div>
             </div>
-            <div class="summary-ev">
+            <div class="summary-ev insurance-ev-block">
               <div>
                 <span>期望净盈亏</span>
-                <strong id="doubleExpectedValue">+¥229.40</strong>
+                <strong id="doubleExpectedValue">—</strong>
               </div>
               <small>按三种结果概率加权，仅用于比较方案</small>
             </div>
+            <div class="settlement-overview-grid" aria-label="保险汇总">
+              <div><span>计划买入</span><strong id="doublePlannedBuy">—</strong></div>
+              <div><span>最差净盈亏</span><strong id="doubleWorstNet">—</strong></div>
+              <div><span>最好净盈亏</span><strong id="doubleBestNet">—</strong></div>
+              <div><span>不买保险对照</span><strong id="doubleNoInsurance">—</strong></div>
+            </div>
             <div class="strategy-ev-panel">
               <div class="strategy-ev-heading"><strong>保险策略期望收益对比</strong><span>按当前转牌、河牌 outs 和买入金额</span></div>
-              <div class="strategy-ev-grid" id="doubleStrategyRows"></div>
+              <div class="strategy-ev-grid" id="doubleStrategyRows"><div class="strategy-empty">填入金额后显示策略对比</div></div>
             </div>
           </article>
 
           <article class="panel table-panel">
             <div class="table-heading">
               <div>
-                <p class="section-kicker">步骤 3</p>
-                <h3>两次保险净盈亏明细</h3>
+                <p class="section-kicker">结算明细</p>
+                <h3>保险结果明细</h3>
               </div>
-              <span class="table-note">转牌爆后不再购买河牌保险</span>
+              <span class="table-note">爆保险时，该阶段买入本金不扣</span>
             </div>
             <div class="table-scroll">
               <table class="double-result-table">
@@ -449,7 +316,7 @@
                     <th scope="col">最终净盈亏</th>
                   </tr>
                 </thead>
-                <tbody id="doubleResultRows"></tbody>
+                <tbody id="doubleResultRows"><tr><td colspan="5" class="table-empty">填写底池与投入后显示结算</td></tr></tbody>
               </table>
             </div>
             <div class="table-footnote">
@@ -461,13 +328,35 @@
           <article class="formula-strip">
             <div class="formula-icon" aria-hidden="true">ƒx</div>
             <div>
-              <strong>两次保险计算口径</strong>
-              <p>转牌爆：转牌赔付 − 个人投入；河牌爆：河牌赔付 − 个人投入 − 转牌买入；两次不爆：底池 − 个人投入 − 转牌买入 − 河牌买入。概率按翻牌后 47 张、河牌 46 张未知牌估算。</p>
+              <strong>统一计算口径</strong>
+              <p>转牌爆：转牌赔付 − 个人投入；河牌爆：河牌赔付 − 个人投入 − 转牌买入；转牌、河牌都不爆：底池 − 个人投入 − 两街买入。</p>
             </div>
-            <button class="copy-button" id="doubleCopyButton" type="button" title="复制两次保险计算结果">复制结果</button>
+            <button class="copy-button" id="doubleCopyButton" type="button" title="复制保险计算结果">复制结果</button>
           </article>
-          <p class="disclaimer">河牌 outs 请按转牌未爆后的实际牌面填写。</p>
+          <p class="disclaimer">河牌 outs 按转牌未爆后的实际牌面填写；仅用于牌局测算。</p>
         </div>
+      </section>
+
+      <section class="legacy-single-workspace is-hidden" id="singleWorkspace" data-workspace="single" aria-hidden="true">
+        <article class="panel odds-panel">
+          <div class="odds-readout"><strong id="oddsValue">2.8x</strong></div>
+          <div class="odds-scale" id="oddsScale" aria-label="按 outs 选择赔率"></div>
+          <input class="odds-range" id="outsRange" type="range" min="0" max="17" step="1" value="9" aria-label="outs 张数" />
+          <span id="oddsHint">每买 100，爆保险赔 280</span>
+        </article>
+        <article class="panel inputs-panel base-input-panel" id="singleBaseInputPanel">
+          <input id="potInput" type="number" inputmode="decimal" min="0" step="1" />
+          <input id="stakeInput" type="number" inputmode="decimal" min="0" step="1" />
+        </article>
+        <article class="panel custom-panel">
+          <input id="customBuyInput" type="number" inputmode="decimal" min="0" step="1" />
+          <strong id="customPayout">—</strong>
+          <strong id="customBuyValue">—</strong>
+          <button id="copyButton" type="button">复制结果</button>
+          <span id="summaryOuts">—</span><strong id="summaryOdds">—</strong>
+          <strong id="hitNetValue">—</strong><strong id="safeNetValue">—</strong>
+        </article>
+        <table><tbody id="resultRows"></tbody></table>
       </section>
       <section class="call-workspace is-hidden" id="callWorkspace" data-workspace="call" aria-labelledby="callTitle">
         <div class="call-grid">
@@ -572,8 +461,8 @@
         </div>
       </section>
     </div>
-    <script src="poker-core.js?v=81"></script>
-    <script src="app-hand-analysis.js?v=81"></script>
-    <script src="app.js?v=81"></script>
+    <script src="poker-core.js?v=88"></script>
+    <script src="app-hand-analysis.js?v=88"></script>
+    <script src="app.js?v=88"></script>
   </body>
 </html>

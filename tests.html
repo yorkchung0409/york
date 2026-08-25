@@ -10,8 +10,8 @@
     <h1>核心计算测试</h1>
     <p id="summary">测试中…</p>
     <ol id="results"></ol>
-    <script src="poker-core.js?v=81"></script>
-    <script src="app-hand-analysis.js?v=81"></script>
+    <script src="poker-core.js?v=88"></script>
+    <script src="app-hand-analysis.js?v=88"></script>
     <script>
       const results = document.querySelector("#results");
       const cases = [];
@@ -80,6 +80,92 @@
       test("转牌只计算下一张牌", () => {
         const result = PokerCore.callProbability(9, 46, 1);
         return result.next === result.byRiver && Math.abs(result.next - 9 / 46) < 0.000001;
+      });
+      test("双街结算核心已导出", () => typeof PokerCore.calculateTwoStreetSettlement === "function");
+      test("双街三分支概率和净额公式", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 1000,
+          stake: 200,
+          turn: { outs: 9, buy: 100 },
+          river: { outs: 8, buy: 100 },
+          firstUnknownCards: 47,
+          secondUnknownCards: 46
+        });
+        const [turnHit, riverHit, bothSafe] = result.rows;
+        const expectedTurn = 9 / 47;
+        const expectedRiver = (1 - expectedTurn) * 8 / 46;
+        const expectedSafe = (1 - expectedTurn) * (1 - 8 / 46);
+        return Math.abs(result.probabilities.turnHit - expectedTurn) < 1e-12
+          && Math.abs(result.probabilities.riverHit - expectedRiver) < 1e-12
+          && Math.abs(result.probabilities.bothSafe - expectedSafe) < 1e-12
+          && turnHit.net === 100 * PokerCore.oddsForOuts(9) - 200
+          && riverHit.net === 100 * PokerCore.oddsForOuts(8) - 200 - 100
+          && bothSafe.net === 1000 - 200 - 100 - 100
+          && Math.abs(result.expectedNet - result.rows.reduce((sum, row) => sum + row.probability * row.net, 0)) < 1e-12;
+      });
+      test("双街概率 outs 和分母会 clamp 且不产生 NaN", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: "bad",
+          stake: "",
+          turn: { outs: 999, buy: "bad" },
+          river: { outs: -4, buy: Infinity },
+          firstUnknownCards: 0,
+          secondUnknownCards: -1
+        });
+        const values = [
+          ...Object.values(result.probabilities), result.expectedNet, result.expectedNoInsurance,
+          result.worstNet, result.bestNet, result.plannedBuy, ...result.rows.flatMap((row) => Object.values(row).filter((value) => typeof value === "number"))
+        ];
+        return values.every((value) => Number.isFinite(value))
+          && result.probabilities.turnHit >= 0 && result.probabilities.turnHit <= 1
+          && result.probabilities.riverHit >= 0 && result.probabilities.riverHit <= 1
+          && result.probabilities.bothSafe >= 0 && result.probabilities.bothSafe <= 1;
+      });
+      test("转牌爆时不扣河牌买入", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 500, stake: 80,
+          turn: { outs: 5, buy: 20 }, river: { outs: 5, buy: 30 },
+          turnStatus: "hit", riverStatus: "unseen"
+        });
+        return result.rows.length === 1 && result.rows[0].key === "turnHit"
+          && result.rows[0].net === 20 * PokerCore.oddsForOuts(5) - 80
+          && result.plannedBuy === 20;
+      });
+      test("转牌安全河牌爆只扣转牌买入", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 500, stake: 80,
+          turn: { outs: 5, buy: 20 }, river: { outs: 5, buy: 30 },
+          turnStatus: "safe", riverStatus: "hit"
+        });
+        return result.rows.length === 1 && result.rows[0].key === "riverHit"
+          && result.rows[0].net === 30 * PokerCore.oddsForOuts(5) - 80 - 20;
+      });
+      test("双安全扣两份买入", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 500, stake: 80,
+          turn: { outs: 5, buy: 20 }, river: { outs: 5, buy: 30 },
+          turnStatus: "safe", riverStatus: "safe"
+        });
+        return result.rows.length === 1 && result.rows[0].key === "bothSafe"
+          && result.rows[0].receipt === 500 && result.rows[0].net === 500 - 80 - 20 - 30;
+      });
+      test("空河牌 outs 保持待定，不静默算双安全", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 500, stake: 80,
+          turn: { outs: 5, buy: 20 }, river: { outs: "", buy: "" }
+        });
+        return result.riverPending === true && result.hasRiverInput === false
+          && result.probabilities.bothSafe === 0
+          && result.rows.some((row) => row.key === "riverPending")
+          && result.rows.every((row) => Number.isFinite(row.net));
+      });
+      test("显式 0 河牌 outs 可结算为双安全", () => {
+        const result = PokerCore.calculateTwoStreetSettlement({
+          coverage: 500, stake: 80,
+          turn: { outs: 5, buy: 20 }, river: { outs: 0, buy: 30 }
+        });
+        return result.hasRiverInput === true && result.riverPending === false
+          && result.probabilities.riverHit === 0 && result.probabilities.bothSafe === 1 - 5 / 47;
       });
       test("Call 结论覆盖值得跟、临界和不建议", () => {
         const good = PokerCore.calculateCallMetrics({ potBeforeCall: 160, callAmount: 80, outs: 17, unknownCards: 47, cardsToCome: 1 });

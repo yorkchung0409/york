@@ -399,6 +399,226 @@
     };
   }
 
+  // Pure two-street insurance settlement.  The UI has historically carried
+  // this arithmetic inline; keeping it here makes the three outcome branches
+  // deterministic and protects callers from blank/invalid form values.
+  function calculateTwoStreetSettlement(input = {}) {
+    const source = input && typeof input === "object" ? input : {};
+    const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+    const finiteNumber = (value, fallback = 0) => {
+      try {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      } catch (error) {
+        return fallback;
+      }
+    };
+    const nonNegative = (value, fallback = 0) => Math.max(0, finiteNumber(value, fallback));
+    const integerAtLeastZero = (value, fallback) => {
+      const number = finiteNumber(value, fallback);
+      return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : fallback;
+    };
+    const clamp = (value) => {
+      const number = finiteNumber(value, 0);
+      return Math.min(1, Math.max(0, number));
+    };
+    const probabilityFromOuts = (outs, denominator) => {
+      const cards = integerAtLeastZero(denominator, 0);
+      return cards > 0 ? clamp(normalizedOuts(outs, 0) / cards) : 0;
+    };
+    const streetObject = (name) => {
+      const nested = source[name];
+      return nested && typeof nested === "object" ? nested : {};
+    };
+    const turnInput = streetObject("turn");
+    const riverInput = streetObject("river");
+    const topLevelTurn = (!hasOwn(source, "turn") || !source.turn || typeof source.turn !== "object")
+      && (hasOwn(source, "turnOuts") || hasOwn(source, "turnBuy"))
+      ? { outs: source.turnOuts, buy: source.turnBuy } : null;
+    const topLevelRiver = (!hasOwn(source, "river") || !source.river || typeof source.river !== "object")
+      && (hasOwn(source, "riverOuts") || hasOwn(source, "riverBuy"))
+      ? { outs: source.riverOuts, buy: source.riverBuy } : null;
+    const turn = topLevelTurn || turnInput;
+    const river = topLevelRiver || riverInput;
+    const rawOuts = (street, fallback = 0) => {
+      const raw = hasOwn(street, "outs") ? street.outs : fallback;
+      const parsed = finiteNumber(raw, NaN);
+      return Number.isFinite(parsed) ? normalizedOuts(parsed, 0) : 0;
+    };
+    const rawBuy = (street) => nonNegative(hasOwn(street, "buy") ? street.buy : 0);
+    const turnOuts = rawOuts(turn);
+    const riverOuts = rawOuts(river);
+    const coverageRaw = hasOwn(source, "coverage") && source.coverage !== null && source.coverage !== undefined
+      ? source.coverage : source.pot;
+    const stakeRaw = hasOwn(source, "stake") && source.stake !== null && source.stake !== undefined
+      ? source.stake : source.myStake;
+    const coverage = nonNegative(coverageRaw);
+    const stake = nonNegative(stakeRaw);
+    const firstRaw = hasOwn(source, "firstUnknownCards") ? source.firstUnknownCards : (hasOwn(source, "first") ? source.first : undefined);
+    const firstUnknownCards = firstRaw === undefined ? 47 : integerAtLeastZero(firstRaw, 0);
+    const secondRaw = hasOwn(source, "secondUnknownCards") ? source.secondUnknownCards : (hasOwn(source, "second") ? source.second : undefined);
+    const secondUnknownCards = secondRaw === undefined ? Math.max(firstUnknownCards - 1, 0) : integerAtLeastZero(secondRaw, 0);
+    const turnOdds = oddsForOuts(turnOuts);
+    const riverOdds = oddsForOuts(riverOuts);
+    // Keep the old UI's cap semantics: a single insurance payout cannot
+    // exceed the covered pool.  Invalid or blank amounts normalize to zero.
+    const cappedBuy = (street, odds) => {
+      const buy = rawBuy(street);
+      const cap = odds > 0 ? coverage / odds : 0;
+      return Math.min(buy, Number.isFinite(cap) ? Math.max(0, cap) : 0);
+    };
+    const turnBuy = cappedBuy(turn, turnOdds);
+    const riverBuy = cappedBuy(river, riverOdds);
+    const turnPayout = turnBuy * turnOdds;
+    const riverPayout = riverBuy * riverOdds;
+    const normalizeStatus = (value) => {
+      const status = String(value ?? "").trim().toLowerCase();
+      if (status === "hit" || status === "爆" || status === "bust" || status === "h") return "hit";
+      if (status === "safe" || status === "安全" || status === "s") return "safe";
+      if (status === "unknown" || status === "unseen" || status === "" || status === "pending") return "unseen";
+      return "unseen";
+    };
+    const turnStatusRaw = hasOwn(source, "turnStatus") && source.turnStatus !== null && source.turnStatus !== undefined
+      ? source.turnStatus : turn.status;
+    const riverStatusRaw = hasOwn(source, "riverStatus") && source.riverStatus !== null && source.riverStatus !== undefined
+      ? source.riverStatus : river.status;
+    const turnStatus = normalizeStatus(turnStatusRaw);
+    const riverStatus = normalizeStatus(riverStatusRaw);
+    // A resolved river necessarily implies that the turn was safe.  Preserve
+    // an explicit turn hit as terminal when callers provide contradictory
+    // metadata, but infer the safe turn for the common river-only update.
+    const resolvedTurnStatus = turnStatus === "hit"
+      ? "hit"
+      : (turnStatus === "safe" || riverStatus === "hit" || riverStatus === "safe" ? "safe" : "unseen");
+    const turnHitRate = probabilityFromOuts(turnOuts, firstUnknownCards);
+    const riverConditionalRate = probabilityFromOuts(riverOuts, secondUnknownCards);
+    const hasNonEmptyValue = (object, key) => {
+      if (!hasOwn(object, key) || object[key] === null || object[key] === undefined) return false;
+      try { return String(object[key]).trim() !== ""; } catch (error) { return false; }
+    };
+    const turnHasValue = hasNonEmptyValue(turn, "outs");
+    const riverRawOuts = hasOwn(river, "outs") ? river.outs : undefined;
+    const riverHasNumericValue = hasNonEmptyValue(river, "outs")
+      && Number.isFinite(finiteNumber(riverRawOuts, NaN))
+      && finiteNumber(riverRawOuts, -1) >= 0;
+    const riverHasStatus = (hasOwn(source, "riverStatus") || hasOwn(river, "status"))
+      && (riverStatus === "hit" || riverStatus === "safe");
+    const riverHasInput = riverHasStatus || riverHasNumericValue;
+    const riverPending = resolvedTurnStatus !== "hit" && !riverHasInput;
+
+    const makeRow = (key, label, probability, buy, receipt, payout, net) => ({
+      key,
+      label,
+      probability: clamp(probability),
+      buy: nonNegative(buy),
+      receipt: finiteNumber(receipt, 0),
+      payout: finiteNumber(payout, 0),
+      net: finiteNumber(net, 0)
+    });
+    const rows = [];
+    let probabilities;
+    let plannedBuy;
+
+    if (resolvedTurnStatus === "hit") {
+      // A hit on the first street is terminal: neither the second premium nor
+      // the second payout participates in this settlement.
+      probabilities = { turnHit: 1, riverHit: 0, bothSafe: 0 };
+      rows.push(makeRow("turnHit", "转牌爆保险（终局）", 1, turnBuy, turnPayout, turnPayout, turnPayout - stake));
+      plannedBuy = turnBuy;
+    } else if (resolvedTurnStatus === "safe" && riverStatus === "hit") {
+      probabilities = { turnHit: 0, riverHit: 1, bothSafe: 0 };
+      rows.push(makeRow("riverHit", "转牌安全 · 河牌爆保险", 1, turnBuy + riverBuy, riverPayout, riverPayout, riverPayout - stake - turnBuy));
+      plannedBuy = turnBuy + riverBuy;
+    } else if (resolvedTurnStatus === "safe" && riverStatus === "safe") {
+      probabilities = { turnHit: 0, riverHit: 0, bothSafe: 1 };
+      rows.push(makeRow("bothSafe", "转牌河牌双安全", 1, turnBuy + riverBuy, coverage, 0, coverage - stake - turnBuy - riverBuy));
+      plannedBuy = turnBuy + riverBuy;
+    } else if (resolvedTurnStatus === "safe") {
+      // The turn is known safe.  A numeric river outs value enables the two
+      // conditional river branches; a blank/invalid value remains pending.
+      if (riverHasInput) {
+        const riverHit = riverStatus === "hit" ? 1 : riverConditionalRate;
+        const bothSafe = riverStatus === "hit" ? 0 : clamp(1 - riverHit);
+        probabilities = { turnHit: 0, riverHit, bothSafe };
+        if (riverHit > 0 || riverStatus !== "safe") {
+          rows.push(makeRow("riverHit", "转牌安全 · 河牌爆保险", riverHit, turnBuy + riverBuy, riverPayout, riverPayout, riverPayout - stake - turnBuy));
+        }
+        if (bothSafe > 0 || riverStatus !== "hit") {
+          rows.push(makeRow("bothSafe", "转牌河牌双安全", bothSafe, turnBuy + riverBuy, coverage, 0, coverage - stake - turnBuy - riverBuy));
+        }
+        plannedBuy = turnBuy + riverBuy;
+      } else {
+        probabilities = { turnHit: 0, riverHit: 0, bothSafe: 0 };
+        rows.push(makeRow("riverPending", "转牌安全 · 等待河牌", 1, turnBuy, coverage, 0, coverage - stake - turnBuy));
+        plannedBuy = turnBuy;
+      }
+    } else if (riverHasInput) {
+      // Both streets are still unseen, so retain all three mutually exclusive
+      // branches.  `riverHasInput` is intentionally separate from outs > 0:
+      // an explicit numeric zero means no river outs and therefore true safety.
+      const turnHit = turnHitRate;
+      const riverHit = clamp((1 - turnHit) * riverConditionalRate);
+      const bothSafe = clamp((1 - turnHit) * (1 - riverConditionalRate));
+      probabilities = { turnHit, riverHit, bothSafe };
+      rows.push(makeRow("turnHit", "转牌爆保险（终局）", turnHit, turnBuy, turnPayout, turnPayout, turnPayout - stake));
+      rows.push(makeRow("riverHit", "转牌安全 · 河牌爆保险", riverHit, turnBuy + riverBuy, riverPayout, riverPayout, riverPayout - stake - turnBuy));
+      rows.push(makeRow("bothSafe", "转牌河牌双安全", bothSafe, turnBuy + riverBuy, coverage, 0, coverage - stake - turnBuy - riverBuy));
+      plannedBuy = turnBuy + riverBuy;
+    } else {
+      // Initial double-street entry with no river outs yet.  Keep the residual
+      // probability visible as a pending row instead of mislabelling it as
+      // confirmed double safety.
+      const turnHit = turnHitRate;
+      const turnSafe = clamp(1 - turnHit);
+      probabilities = { turnHit, riverHit: 0, bothSafe: 0 };
+      rows.push(makeRow("turnHit", "转牌爆保险（终局）", turnHit, turnBuy, turnPayout, turnPayout, turnPayout - stake));
+      rows.push(makeRow("riverPending", "转牌安全 · 等待河牌", turnSafe, turnBuy, coverage, 0, coverage - stake - turnBuy));
+      plannedBuy = turnBuy;
+    }
+
+    const expectedNet = rows.reduce((sum, row) => sum + row.probability * row.net, 0);
+    const expectedReceipt = rows.reduce((sum, row) => sum + row.probability * row.receipt, 0);
+    const noInsuranceForRow = (row) => row.key === "turnHit" || row.key === "riverHit" ? -stake : coverage - stake;
+    const expectedNoInsurance = rows.reduce((sum, row) => sum + row.probability * noInsuranceForRow(row), 0);
+    const netValues = rows.length ? rows.map((row) => row.net) : [0];
+    const result = {
+      coverage,
+      stake,
+      turnOuts,
+      riverOuts,
+      turnOdds,
+      riverOdds,
+      turnBuy,
+      riverBuy,
+      turnPayout,
+      riverPayout,
+      firstUnknownCards,
+      secondUnknownCards,
+      turnStatus,
+      riverStatus,
+      resolvedTurnStatus,
+      hasRiverInput: riverHasInput,
+      riverPending,
+      turnHasInput: turnHasValue,
+      probabilities,
+      rows,
+      plannedBuy,
+      totalBuy: plannedBuy,
+      expectedReceipt,
+      expectedNet,
+      expectedDouble: expectedNet,
+      expectedNoInsurance,
+      worstNet: Math.min(...netValues),
+      bestNet: Math.max(...netValues),
+      // Compatibility aliases used by the pre-core UI and earlier callers.
+      turnProbability: probabilities.turnHit,
+      riverProbability: probabilities.riverHit,
+      bothSafeProbability: probabilities.bothSafe,
+      safeProbability: probabilities.bothSafe
+    };
+    return result;
+  }
+
   function buildSidePots(contributions, playerKeys = ["A", "B", "C", "D"]) {
     const positive = playerKeys.map((key) => Number(contributions[key]) || 0).filter((value) => value > 0).sort((a, b) => a - b);
     const highest = positive[positive.length - 1] || 0;
@@ -465,6 +685,7 @@
     callProbability,
     calculateCallMetrics,
     calculateCallEquity,
+    calculateTwoStreetSettlement,
     buildSidePots,
     sideEffectiveStakes,
     sidePoolLeaders,

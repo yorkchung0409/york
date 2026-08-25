@@ -6,6 +6,7 @@ const numericStringIsValid = Core.numericStringIsValid;
 const parseCallOuts = Core.parseCallOuts;
 const calculateCallMetrics = Core.calculateCallMetrics;
 const calculateCallEquity = Core.calculateCallEquity;
+const calculateTwoStreetSettlement = Core.calculateTwoStreetSettlement;
 const {
   calculateHandOuts,
   calculateFinalEquities,
@@ -90,6 +91,15 @@ const els = {
   doubleRiverMeter: $("#doubleRiverMeter"),
   doubleBothSafeMeter: $("#doubleBothSafeMeter"),
   doubleExpectedValue: $("#doubleExpectedValue"),
+  doublePlannedBuy: $("#doublePlannedBuy"),
+  doubleWorstNet: $("#doubleWorstNet"),
+  doubleBestNet: $("#doubleBestNet"),
+  doubleNoInsurance: $("#doubleNoInsurance"),
+  insuranceStatusBadge: $("#insuranceStatusBadge"),
+  insuranceStatus: $("#insuranceStatus"),
+  insuranceStreetStatus: $("#insuranceStreetStatus"),
+  turnStageNote: $("#turnStageNote"),
+  riverStageNote: $("#riverStageNote"),
   doubleRows: $("#doubleResultRows"),
   callInvested: $("#callInvestedInput"),
   callPot: $("#callPotInput"),
@@ -164,7 +174,11 @@ const HAND_CATEGORY_LABELS = ["高牌", "一对", "两对", "三条", "顺子", 
 let handAnalysis = null;
 let cardPickerState = null;
 let sideBuyerOutAnalysis = {};
-let doubleRiverUnlocked = false;
+// Insurance is now a single two-street workflow. Keep this legacy flag for
+// drafts/markup compatibility, but never use it to lock the river controls.
+let doubleRiverUnlocked = true;
+let insuranceHistory = { turn: null, river: null, side: null };
+let lastInsuranceBoardStreet = 3;
 let sidePotInputState = {};
 // Keys explicitly edited by the user are kept separate so automatic 100%
 // recommendations can follow changed outs without overwriting a manual buy.
@@ -188,6 +202,14 @@ function readDraft() {
 
 function applyDraft(draft) {
   if (!draft?.values) return;
+  const draftMode = draft.mode === "call" ? "call" : "insurance";
+  if (draft.insuranceHistory && typeof draft.insuranceHistory === "object") {
+    insuranceHistory = {
+      turn: draft.insuranceHistory.turn && typeof draft.insuranceHistory.turn === "object" ? draft.insuranceHistory.turn : null,
+      river: draft.insuranceHistory.river && typeof draft.insuranceHistory.river === "object" ? draft.insuranceHistory.river : null,
+      side: draft.insuranceHistory.side && typeof draft.insuranceHistory.side === "object" ? draft.insuranceHistory.side : null
+    };
+  }
   if (draft.sidePotInputState && typeof draft.sidePotInputState === "object") {
     sidePotInputState = Object.fromEntries(Object.entries(draft.sidePotInputState)
       .filter(([key, value]) => typeof key === "string" && typeof value === "string"));
@@ -202,10 +224,23 @@ function applyDraft(draft) {
     if (input.type === "checkbox") input.checked = draft.checked?.[id] ?? (value === "true" || value === "1");
     else if (typeof value === "string") input.value = value;
   });
+  const cardValues = draft.cardValues && typeof draft.cardValues === "object" ? draft.cardValues : null;
+  if (cardValues) {
+    const boardValues = Array.isArray(cardValues.board) ? cardValues.board : [];
+    document.querySelectorAll('[data-card-kind="board"]').forEach((input, index) => {
+      input.value = typeof boardValues[index] === "string" ? boardValues[index] : "";
+    });
+    PLAYER_KEYS.forEach((key) => {
+      const values = Array.isArray(cardValues.hands?.[key]) ? cardValues.hands[key] : [];
+      document.querySelectorAll(`[data-card-kind="hand"][data-player="${key}"]`).forEach((input, index) => {
+        input.value = typeof values[index] === "string" ? values[index] : "";
+      });
+    });
+  }
   // Dynamic side-pot controls are rendered from this state after the static
   // form values have been restored. Do not let the first render overwrite it.
   sideBuyerMarkupSignature = "";
-  if (draft.mode === "call") {
+  if (draftMode === "call") {
     const boardCount = [...document.querySelectorAll('[data-card-kind="board"]')].filter((input) => input.value).length;
     if (els.handStreet) els.handStreet.value = boardCount >= 5 ? "river" : boardCount === 4 ? "turn" : "flop";
   }
@@ -213,7 +248,9 @@ function applyDraft(draft) {
   updatePickerButtons();
   refreshCardAvailability();
   callSource = draft.callSource === "auto" ? "auto" : "manual";
-  doubleRiverUnlocked = draft.mode === "double" && Boolean(draft.doubleRiverUnlocked);
+  // Legacy `single`/`double` drafts both restore into the unified insurance
+  // workspace. The board itself determines whether turn/river are pending.
+  doubleRiverUnlocked = true;
 }
 
 function saveDraft() {
@@ -221,10 +258,14 @@ function saveDraft() {
     captureSidePotInputs();
     const inputs = [...document.querySelectorAll("input[id], select[id]")];
     const values = Object.fromEntries(inputs.map((input) => [input.id, input.value]));
+    const cardValues = {
+      board: [...document.querySelectorAll('[data-card-kind="board"]')].map((input) => input.value),
+      hands: Object.fromEntries(PLAYER_KEYS.map((key) => [key, [...document.querySelectorAll(`[data-card-kind="hand"][data-player="${key}"]`)].map((input) => input.value)]))
+    };
     const checked = Object.fromEntries(inputs.filter((input) => input.type === "checkbox")
       .map((input) => [input.id, input.checked]));
-    const mode = document.body.classList.contains("call-mode-active") ? "call" : document.body.classList.contains("double-mode-active") ? "double" : "single";
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1, mode, poolMode, callSource, doubleRiverUnlocked, sideRankManuallyEdited, sidePotInputState, sidePotManualBuyKeys: [...sidePotManualBuyKeys], values, checked }));
+    const mode = document.body.classList.contains("call-mode-active") ? "call" : "insurance";
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 3, mode, poolMode, callSource, doubleRiverUnlocked: true, insuranceHistory, sideRankManuallyEdited, sidePotInputState, sidePotManualBuyKeys: [...sidePotManualBuyKeys], cardValues, values, checked }));
   } catch {
     // Private browsing or storage limits should never block calculation.
   }
@@ -279,11 +320,8 @@ function removeSelectedCard(target, value) {
     for (let cursor = index; cursor < inputs.length - 1; cursor += 1) inputs[cursor].value = inputs[cursor + 1].value;
     inputs[inputs.length - 1].value = "";
     const count = inputs.filter((input) => input.value).length;
-    if (document.body.classList.contains("call-mode-active")) els.handStreet.value = count >= 5 ? "river" : count === 4 ? "turn" : "flop";
-    else if (count < 4) {
-      els.handStreet.value = "flop";
-      doubleRiverUnlocked = false;
-    }
+    els.handStreet.value = count >= 5 ? "river" : count >= 4 ? "turn" : "flop";
+    lastInsuranceBoardStreet = Math.min(Math.max(count, 3), 5);
   } else {
     const input = handTargetInputs(target).find((item) => item.value === value);
     if (!input) return;
@@ -301,19 +339,17 @@ function handTargetInputs(target) {
     if (document.body.classList.contains("call-mode-active")) {
       return [...document.querySelectorAll('[data-card-kind="board"]')];
     }
-    const count = els.handStreet?.value === "turn" ? 4 : 3;
-    return [...document.querySelectorAll('[data-card-kind="board"]')].slice(0, count);
+    // Insurance and call both use the same five board slots. The selected
+    // street is derived from the number of dealt cards, not a forced step.
+    return [...document.querySelectorAll('[data-card-kind="board"]')];
   }
-  if (target === "advance") {
-    const input = document.querySelector('[data-card-kind="board"][data-card-index="3"]');
-    return input ? [input] : [];
-  }
+  if (target === "advance") return [...document.querySelectorAll('[data-card-kind="board"]')];
   return [...document.querySelectorAll(`[data-card-kind="hand"][data-player="${target}"]`)];
 }
 
 function pickerTargetLabel(target) {
   if (target === "board") return "公共牌";
-  if (target === "advance") return "实际转牌";
+  if (target === "advance") return "公共牌";
   return `${target} 手牌`;
 }
 
@@ -338,7 +374,7 @@ function updatePickerButtons() {
   const isCall = document.body.classList.contains("call-mode-active");
   const boardInputs = handTargetInputs("board");
   const boardValues = boardInputs.map((input) => input.value).filter(Boolean);
-  const boardExpected = isCall ? 5 : els.handStreet?.value === "turn" ? 4 : 3;
+  const boardExpected = isCall ? 5 : Math.min(Math.max(boardValues.length, 3), 5);
   const activeKeys = activeHandPlayers();
   const playerKeys = isCall ? [els.callHero?.value || "A"] : activeKeys;
   const completePlayers = playerKeys.filter((key) => handTargetInputs(key).every((input) => Boolean(input.value))).length;
@@ -351,18 +387,14 @@ function updatePickerButtons() {
   }
   if (els.boardHandHint) els.boardHandHint.textContent = isCall ? "可选择 3–5 张公共牌，点击已选牌可取消" : "点击按钮选择牌面，前三张必填";
   if (els.playerHandHint) els.playerHandHint.textContent = isCall ? "我的手牌必填；对手手牌可选，未知时留空" : "点击每位玩家的按钮选择两张底牌";
-  const canChooseTurn = document.body.classList.contains("double-mode-active")
-    && els.handStreet?.value !== "turn"
-    && boardValues.length === 3
-    && completePlayers === activeKeys.length;
   const boardPickerCopy = els.boardPickerButton.querySelector(".picker-button-copy strong");
   const boardPickerSummary = els.boardPickerButton.querySelector("[data-board-picker-summary]");
-  if (boardPickerCopy) boardPickerCopy.textContent = canChooseTurn ? "选择实际转牌" : "选择公共牌";
-  if (boardPickerSummary) boardPickerSummary.textContent = canChooseTurn
-    ? "翻牌已完成 · 选择第 4 张公共牌"
-    : isCall ? `已选 ${boardValues.length} / 5 张（至少 3 张）` : `已选 ${boardValues.length} / ${boardExpected} 张`;
-  els.boardPickerButton.dataset.pickerTarget = canChooseTurn ? "advance" : "board";
-  els.boardPickerButton.setAttribute("aria-label", canChooseTurn ? "选择实际转牌" : "选择公共牌");
+  if (boardPickerCopy) boardPickerCopy.textContent = "选择公共牌";
+  if (boardPickerSummary) boardPickerSummary.textContent = isCall
+    ? `已选 ${boardValues.length} / 5 张（至少 3 张）`
+    : `已选 ${boardValues.length} / 5 张（至少 3 张）`;
+  els.boardPickerButton.dataset.pickerTarget = "board";
+  els.boardPickerButton.setAttribute("aria-label", "选择公共牌");
   els.boardPickerButton.classList.toggle("has-selection", boardValues.length > 0);
   document.querySelectorAll("[data-player-picker]").forEach((button) => {
     const key = button.dataset.playerPicker;
@@ -406,13 +438,12 @@ function openCardPicker(target) {
   const inputs = handTargetInputs(target);
   if (!inputs.length) return;
   const initial = inputs.map((input) => input.value).filter(Boolean);
-  const isCallBoard = document.body.classList.contains("call-mode-active") && target === "board";
-  cardPickerState = { target, inputs, initial, selected: [...initial], min: isCallBoard ? 3 : inputs.length, max: isCallBoard ? 5 : inputs.length };
+  const isBoard = target === "board" || target === "advance";
+  const isCallBoard = document.body.classList.contains("call-mode-active") && isBoard;
+  cardPickerState = { target: isBoard ? "board" : target, inputs: isBoard ? [...document.querySelectorAll('[data-card-kind="board"]')] : inputs, initial: isBoard ? [...document.querySelectorAll('[data-card-kind="board"]')].map((input) => input.value).filter(Boolean) : initial, selected: isBoard ? [...document.querySelectorAll('[data-card-kind="board"]')].map((input) => input.value).filter(Boolean) : [...initial], min: isBoard ? 3 : inputs.length, max: isBoard ? 5 : inputs.length };
   els.cardPickerTitle.textContent = `选择${pickerTargetLabel(target)}`;
-  els.cardPickerHint.textContent = target === "board"
-    ? isCallBoard ? "请选择 3–5 张公共牌；点击已选牌可取消，未知对手手牌可以留空。" : `请选择 ${inputs.length} 张公共牌；重复牌和其他已录入的牌不能选择。`
-    : target === "advance"
-      ? "请选择实际发出的转牌；确认后会切换到转牌后，并等待你重新计算河牌 outs。"
+  els.cardPickerHint.textContent = isBoard
+    ? "请选择 3–5 张公共牌；发牌街道由已选牌数量决定，重复牌不能选择。"
     : `请选择 ${inputs.length} 张${target}的底牌；重复牌不能选择。`;
   els.cardPickerBackdrop.classList.remove("is-hidden");
   renderCardPickerGrid();
@@ -425,18 +456,16 @@ function confirmCardPicker() {
     input.value = cardPickerState.selected[index] || "";
   });
   const target = cardPickerState.target;
-  if (target === "advance") {
-    els.handStreet.value = "turn";
-    doubleRiverUnlocked = true;
-  } else if (target === "board" && document.body.classList.contains("call-mode-active")) {
+  if (target === "board" || target === "advance") {
     const count = cardPickerState.selected.length;
     els.handStreet.value = count >= 5 ? "river" : count === 4 ? "turn" : "flop";
+    lastInsuranceBoardStreet = Math.min(Math.max(count, 3), 5);
   }
   updateHandStreetSummary();
   closeCardPicker();
   refreshCardAvailability();
   updatePickerButtons();
-  analyzeHandSituation(false);
+  recalculateAfterCardInput();
   queueDraftSave();
   if (target === "board") {
     els.handAnalysisResults.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -468,40 +497,80 @@ function updateHandStreetSummary() {
 function syncHandStreetToMode(isDouble, reset = true) {
   if (!els.handStreet) return;
   const isCall = document.body.classList.contains("call-mode-active");
-  const nextStreet = isCall || isDouble ? "flop" : "turn";
-  if (reset) {
-    els.handStreet.value = nextStreet;
-    doubleRiverUnlocked = !isDouble || isCall;
-    if (isDouble || isCall) {
-      const turnInput = document.querySelector('[data-card-kind="board"][data-card-index="3"]');
-      if (turnInput) turnInput.value = "";
-      const riverInput = document.querySelector('[data-card-kind="board"][data-card-index="4"]');
-      if (riverInput) riverInput.value = "";
-    }
-  }
+  const boardCount = [...document.querySelectorAll('[data-card-kind="board"]')].filter((input) => input.value).length;
+  const nextStreet = boardCount >= 5 ? "river" : boardCount >= 4 ? "turn" : "flop";
+  // Mode switches must not erase dealt cards or previously entered buys.
+  els.handStreet.value = nextStreet;
+  doubleRiverUnlocked = true;
   updateHandStreetSummary();
 }
 
 function updateDoubleStageUI() {
-  const unlocked = !document.body.classList.contains("double-mode-active") || doubleRiverUnlocked;
-  document.body.classList.toggle("double-river-unlocked", unlocked && document.body.classList.contains("double-mode-active"));
-  els.riverStagePanel?.classList.toggle("is-locked", !unlocked);
-  [els.riverRange, els.riverBuy].forEach((input) => { if (input) input.disabled = !unlocked; });
-  els.riverScale?.classList.toggle("is-disabled", !unlocked);
+  const unlocked = true;
+  doubleRiverUnlocked = true;
+  document.body.classList.add("double-river-unlocked");
+  els.riverStagePanel?.classList.remove("is-locked");
+  [els.riverRange, els.riverBuy].forEach((input) => { if (input) input.disabled = false; });
+  els.riverScale?.classList.remove("is-disabled");
   els.riverScale?.querySelectorAll("button").forEach((button) => {
-    button.disabled = !unlocked;
-    button.setAttribute("aria-disabled", String(!unlocked));
+    button.disabled = false;
+    button.removeAttribute("aria-disabled");
   });
   document.querySelectorAll("[data-river-ratio]").forEach((button) => {
-    button.disabled = !unlocked;
-    button.setAttribute("aria-disabled", String(!unlocked));
+    button.disabled = false;
+    button.removeAttribute("aria-disabled");
   });
   if (els.doubleRiverAdvance) {
-    els.doubleRiverAdvance.hidden = unlocked;
-    els.doubleRiverAdvance.disabled = !document.body.classList.contains("double-mode-active");
+    els.doubleRiverAdvance.hidden = true;
+    els.doubleRiverAdvance.disabled = true;
   }
   const note = document.querySelector("#riverStageNote");
-  if (note) note.textContent = unlocked ? "填写转牌未爆后的实际河牌 outs" : "先确认转牌未爆，再计算河牌保险";
+  if (note) note.textContent = "河牌配置常显；按当前已发公共牌填写河牌 outs";
+}
+
+function updateInsuranceStatusUI(boardStreet, hasAmounts) {
+  const settledTurn = boardStreet >= 4;
+  const settledRiver = boardStreet >= 5;
+  const status = settledRiver
+    ? "转牌、河牌已结算 · 结果已定格"
+    : settledTurn
+      ? "转牌已结算 · 河牌按当前牌面估算"
+      : hasAmounts
+        ? "当前估算 · 转牌和河牌均可配置"
+        : "先填写底池与投入";
+  const badge = settledRiver ? "已结算" : settledTurn ? "转牌已结算" : hasAmounts ? "当前估算" : "等待输入";
+  const street = settledRiver
+    ? "转牌 + 河牌已结算"
+    : settledTurn
+      ? "河牌（保留转牌历史）"
+      : "转牌 + 河牌";
+  if (els.insuranceStatus) els.insuranceStatus.textContent = status;
+  if (els.insuranceStatusBadge) els.insuranceStatusBadge.textContent = badge;
+  if (els.insuranceStreetStatus) els.insuranceStreetStatus.textContent = street;
+  if (els.turnStageNote) els.turnStageNote.textContent = settledRiver
+    ? "已结算 · 转牌买入和转牌结果已定格"
+    : settledTurn
+      ? "已结算 · 转牌买入和转牌结果已保留"
+      : "当前估算 · 发出转牌后将保存本街买入";
+  if (els.riverStageNote) els.riverStageNote.textContent = settledRiver
+    ? "已结算 · 河牌买入和最终结果已定格"
+    : settledTurn
+      ? "当前估算 · 基于转牌后的实际牌面刷新 outs"
+      : "当前估算 · 转牌后按新公共牌刷新河牌 outs";
+}
+
+function recalculateAfterCardInput() {
+  const { street, board, players } = handInputsState();
+  const completeBoard = board.length >= 3 && board.every(Boolean);
+  const completeHands = players.every((player) => player.cards.length === 2 && player.cards.every(Boolean));
+  const isCall = document.body.classList.contains("call-mode-active");
+  // Re-run automatic outs when a complete hand advances to a new street. At
+  // the river keep the previous river snapshot intact and only finalize it.
+  const autoApply = !isCall && completeBoard && completeHands && street < 5;
+  analyzeHandSituation(autoApply);
+  if (isCall) calculateCall();
+  else if (poolMode === "side") calculateSidePool({ capture: false });
+  else calculateDouble();
 }
 
 function renderHandInputs() {
@@ -533,7 +602,8 @@ function renderHandInputs() {
   });
   document.querySelectorAll("[data-card-kind]").forEach((input) => input.addEventListener("change", () => {
     updatePickerButtons();
-    analyzeHandSituation(false);
+    recalculateAfterCardInput();
+    queueDraftSave();
   }));
   updatePickerButtons();
 }
@@ -569,7 +639,8 @@ function refreshCardAvailability() {
 function handInputsState() {
   const isCall = document.body.classList.contains("call-mode-active");
   const selectedBoardCount = [...document.querySelectorAll('[data-card-kind="board"]')].filter((input) => input.value).length;
-  const street = isCall ? Math.min(Math.max(selectedBoardCount, 3), 5) : els.handStreet.value === "turn" ? 4 : 3;
+  const street = Math.min(Math.max(selectedBoardCount, 3), 5);
+  if (els.handStreet) els.handStreet.value = street >= 5 ? "river" : street >= 4 ? "turn" : "flop";
   const board = [...document.querySelectorAll('[data-card-kind="board"]')].slice(0, street).map((input) => input.value);
   const players = activeHandPlayers().map((key) => ({
     key,
@@ -633,7 +704,7 @@ function renderHandCalculationSummary(result, players) {
     const equity = result.equities?.[buyerKey] ?? (result.remainingCount ? (stat.winCards.length + stat.tieCards.length / Math.max(2, players.length)) / result.remainingCount : 0);
     const street = handAnalysis?.street === 4 || els.handStreet?.value === "turn" ? "river" : "turn";
     lines.push(handSummaryLine("✓", `${labels[street]} outs = ${rawOuts}（赔率 ${oddsLabel(odds)}），已自动填入保险区`));
-    if (isDouble && street === "turn") lines.push(handSummaryLine("↗", "河牌 outs 将在转牌未爆并确认实际转牌后计算"));
+    if (isDouble && street === "turn") lines.push(handSummaryLine("↗", "可同时保留转牌与河牌方案；发牌后河牌 outs 可继续修正"));
     lines.push(handSummaryLine("▣", `${buyerKey} 最终胜率 ${(equity * 100).toFixed(1)}%（平局 ${(stat.tieCards.length / Math.max(result.remainingCount, 1) * 100).toFixed(1)}%）`));
   }
   return `<div class="hand-result-summary"><div class="hand-result-summary-heading"><span>outs 概览</span><small>根据当前牌面自动更新</small></div>${lines.join("")}</div>`;
@@ -716,7 +787,7 @@ function applyHandOuts(result, street, activePlayers, boardValues) {
     return;
   }
   const isDouble = document.body.classList.contains("double-mode-active");
-  const target = street === 4 && isDouble ? "river" : (isDouble ? "turn" : "single");
+  const target = street >= 4 ? "river" : (isDouble ? "turn" : "single");
   if (poolMode === "side") {
     const side = calculateSidePool();
     applyAutoSideBuyerState(side, boardValues, activePlayers);
@@ -735,6 +806,21 @@ function applyHandOuts(result, street, activePlayers, boardValues) {
     if (target === "river") els.riverRange.value = count;
     else if (target === "turn") els.turnRange.value = count;
     else els.range.value = count;
+    if (target === "turn") {
+      rememberInsuranceSnapshot("turn", {
+        outs: count,
+        buy: safeNumber(els.turnBuy),
+        hitCards: stat.currentStatus === "领先" ? stat.lossCards : stat.winCards,
+        sourceBoard: boardValues
+      });
+    } else if (target === "river") {
+      rememberInsuranceSnapshot("river", {
+        outs: count,
+        buy: safeNumber(els.riverBuy),
+        hitCards: stat.currentStatus === "领先" ? stat.lossCards : stat.winCards,
+        sourceBoard: boardValues
+      });
+    }
   });
   queueDraftSave();
   if (isDouble) calculateDouble();
@@ -1237,62 +1323,141 @@ function sidePotOutDisplayValue(player, pot, field) {
 
 function sideBoardStreet() {
   const boardCount = [...document.querySelectorAll('[data-card-kind="board"]')].filter((input) => input.value).length;
-  const isCall = document.body.classList.contains("call-mode-active");
-  if (els.handStreet?.value === "river" || (isCall && (Number(handAnalysis?.street) >= 5 || boardCount >= 5))) return 5;
-  if (els.handStreet?.value === "turn" || (isCall && (Number(handAnalysis?.street) >= 4 || boardCount >= 4))) return 4;
-  return 3;
+  const street = Math.min(Math.max(boardCount, 3), 5);
+  if (els.handStreet) els.handStreet.value = street >= 5 ? "river" : street >= 4 ? "turn" : "flop";
+  lastInsuranceBoardStreet = street;
+  return street;
+}
+
+function insuranceBoardValues() {
+  return [...document.querySelectorAll('[data-card-kind="board"]')]
+    .map((input) => input.value)
+    .filter(Boolean);
+}
+
+function insuranceStreetStatus(street, boardStreet = sideBoardStreet()) {
+  const index = street === "turn" ? 3 : 4;
+  if (boardStreet < index + 1) return "unseen";
+  const snapshot = insuranceHistory?.[street];
+  const board = insuranceBoardValues();
+  const sourceLength = index;
+  const sourceBoard = Array.isArray(snapshot?.sourceBoard) ? snapshot.sourceBoard : [];
+  const sourceMatches = sourceBoard.length >= sourceLength
+    && sourceBoard.slice(0, sourceLength).every((card, cursor) => card === board[cursor]);
+  if (snapshot && sourceMatches && Array.isArray(snapshot.hitCards)) {
+    return snapshot.hitCards.includes(board[index]) ? "hit" : "safe";
+  }
+  // If the user dealt a street without running hand analysis, it is still a
+  // resolved street. Treat it as safe while leaving the historical buy intact.
+  return "safe";
+}
+
+function insuranceUnknownCards(boardStreet = sideBoardStreet()) {
+  const counts = insuranceDeckCounts();
+  if (boardStreet <= 3) return { first: counts.first || 47, second: counts.second || 46 };
+  if (boardStreet === 4) {
+    const first = counts.first || 46;
+    return { first, second: first };
+  }
+  return { first: 0, second: 0 };
+}
+
+function rememberInsuranceSnapshot(street, { outs, buy, hitCards = [], sourceBoard } = {}) {
+  if (street !== "turn" && street !== "river") return;
+  const board = Array.isArray(sourceBoard) ? sourceBoard.filter(Boolean) : insuranceBoardValues();
+  insuranceHistory[street] = {
+    outs: Math.min(Math.max(Math.trunc(Number(outs) || 0), 0), 17),
+    buy: Math.max(0, Number(buy) || 0),
+    hitCards: [...new Set((Array.isArray(hitCards) ? hitCards : []).filter(Boolean))],
+    sourceBoard: board.slice(0, street === "turn" ? 3 : 4),
+    updatedAt: Date.now()
+  };
+}
+
+function rememberInsuranceInputs(boardStreet = sideBoardStreet(), { forceTurn = false, forceRiver = false } = {}) {
+  if (!els.turnRange || !els.riverRange) return;
+  const board = insuranceBoardValues();
+  const turnBuy = safeNumber(els.turnBuy);
+  const riverBuy = safeNumber(els.riverBuy);
+  const currentTurn = insuranceHistory.turn || {};
+  const currentRiver = insuranceHistory.river || {};
+  // Once a street has been dealt, its snapshot is the settlement source of
+  // truth. Explicit field edits pass forceTurn/forceRiver and intentionally
+  // revise that historical value; ordinary board recalculation does not.
+  if (boardStreet <= 3 || forceTurn) {
+    rememberInsuranceSnapshot("turn", {
+      outs: normalizedOuts(els.turnRange.value, 0),
+      buy: turnBuy,
+      hitCards: currentTurn.hitCards || [],
+      sourceBoard: currentTurn.sourceBoard?.length ? currentTurn.sourceBoard : board
+    });
+  }
+  if (boardStreet <= 4 || forceRiver) {
+    rememberInsuranceSnapshot("river", {
+      outs: normalizedOuts(els.riverRange.value, 0),
+      buy: riverBuy,
+      hitCards: currentRiver.hitCards || [],
+      sourceBoard: boardStreet >= 4 ? board : (currentRiver.sourceBoard?.length ? currentRiver.sourceBoard : board)
+    });
+  }
+  lastInsuranceBoardStreet = boardStreet;
+}
+
+function rememberEditedInsuranceStreet(street) {
+  const range = street === "turn" ? els.turnRange : els.riverRange;
+  const buy = street === "turn" ? els.turnBuy : els.riverBuy;
+  const snapshot = insuranceHistory?.[street] || {};
+  rememberInsuranceSnapshot(street, {
+    outs: normalizedOuts(range?.value, 0),
+    buy: safeNumber(buy),
+    hitCards: snapshot.hitCards || [],
+    sourceBoard: street === "river" && sideBoardStreet() >= 4
+      ? insuranceBoardValues()
+      : (snapshot.sourceBoard?.length ? snapshot.sourceBoard : insuranceBoardValues())
+  });
 }
 
 function renderSidePotInsuranceFields(side) {
-  const isDouble = document.body.classList.contains("double-mode-active");
   const boardStreet = sideBoardStreet();
-  const done = boardStreet >= 5;
-  const postTurnSingle = !isDouble && boardStreet === 4;
-  const turnDealt = isDouble && boardStreet >= 4;
-  const primaryStreet = postTurnSingle || turnDealt ? "river" : "turn";
-  const primaryLabel = postTurnSingle || turnDealt ? "河牌" : "转牌";
-  const showSecondary = isDouble && doubleRiverUnlocked && !turnDealt && !done;
-  const signature = `${boardStreet}:${primaryStreet}:${showSecondary}:${side.pots.map((pot) => `${sidePotIdentity(pot)}:${pot.amount}:${pot.eligible.join("")}:${sidePoolLeaders(pot, side.rankings).join("")}`).join("|")}`;
+  const turnSettled = boardStreet >= 4;
+  const riverSettled = boardStreet >= 5;
+  const signature = `${boardStreet}:${side.pots.map((pot) => `${sidePotIdentity(pot)}:${pot.amount}:${pot.eligible.join("")}:${sidePoolLeaders(pot, side.rankings).join("")}`).join("|")}`;
   if (signature === sideBuyerMarkupSignature) return;
   sideBuyerMarkupSignature = signature;
   PLAYER_KEYS.forEach((player) => {
     const card = document.querySelector(`[data-player-card="${player}"]`);
     const host = card?.querySelector(".side-pot-insurance-fields");
     if (!host) return;
-    if (done) {
-      host.innerHTML = `<p class="side-pot-insurance-empty">牌已发完，保险已停止；结果按当前牌力结算。</p>`;
-      return;
-    }
     const rows = side.pots.map((pot) => {
       const leaders = sidePoolLeaders(pot, side.rankings);
       if (!leaders.includes(player)) return "";
       const coverage = pot.amount / leaders.length;
-      const primaryOuts = sidePotOutDisplayValue(player, pot, `${primaryStreet}Outs`);
-      const primaryBuy = sidePotValue(player, pot, `${primaryStreet}Buy`);
+      const turnOuts = sidePotOutDisplayValue(player, pot, "turnOuts");
+      const turnBuy = sidePotValue(player, pot, "turnBuy");
       const riverOuts = sidePotOutDisplayValue(player, pot, "riverOuts");
       const riverBuy = sidePotValue(player, pot, "riverBuy");
       const rowKey = `${player}:${pot.index}`;
-      const primaryOutsKey = sidePotInputKey(player, pot, `${primaryStreet}Outs`);
-      const primaryBuyKey = sidePotInputKey(player, pot, `${primaryStreet}Buy`);
+      const turnOutsKey = sidePotInputKey(player, pot, "turnOuts");
+      const turnBuyKey = sidePotInputKey(player, pot, "turnBuy");
       const riverOutsKey = sidePotInputKey(player, pot, "riverOuts");
       const riverBuyKey = sidePotInputKey(player, pot, "riverBuy");
-      const primaryBuyLabel = sidePotManualBuyKeys.has(primaryBuyKey) ? "手动买入" : "默认 100%";
-      const primaryOddsKey = `${player}:${sidePotIdentity(pot)}:${primaryStreet}`;
+      const turnBuyLabel = sidePotManualBuyKeys.has(turnBuyKey) ? "手动买入" : "默认 100%";
       const riverOddsKey = `${player}:${sidePotIdentity(pot)}:river`;
       return `<article class="side-pot-insurance-row" data-side-pot-row="${rowKey}">
-        <div class="side-pot-insurance-heading"><strong>${pot.label}</strong><span>可保 ${amount(coverage)} · ${leaders.join("、")} 领先</span></div>
+        <div class="side-pot-insurance-heading"><strong>${pot.label}</strong><span>可保 ${amount(coverage)} · ${leaders.join("、")} 领先${turnSettled ? " · 转牌已保留" : ""}${riverSettled ? " · 河牌已结算" : ""}</span></div>
         <div class="side-pot-stage-grid">
-          <label class="field"><span>${primaryLabel} outs / 赔率</span><div class="side-outs-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-${primaryStreet}Outs" data-side-pot-input="${primaryOutsKey}" type="number" min="0" max="17" step="1" inputmode="numeric" value="${primaryOuts}" /><strong data-side-pot-odds="${primaryOddsKey}">${oddsLabel(oddsForOuts(primaryOuts))}</strong></div></label>
-          <label class="field"><span>${primaryLabel}买入 <small class="side-buy-hint">${primaryBuyLabel}</small></span><div class="input-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-${primaryStreet}Buy" data-side-pot-input="${primaryBuyKey}" type="number" min="0" step="1" inputmode="decimal" value="${primaryBuy}" /><span>¥</span></div></label>
-           ${showSecondary ? `<label class="field side-pot-river-field"><span>河牌 outs / 赔率</span><div class="side-outs-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-riverOuts" data-side-pot-input="${riverOutsKey}" type="number" min="0" max="17" step="1" inputmode="numeric" value="${riverOuts}" /><strong data-side-pot-odds="${riverOddsKey}">${oddsLabel(oddsForOuts(riverOuts))}</strong></div></label>
-           <label class="field side-pot-river-field"><span>河牌买入 <small class="side-buy-hint">${sidePotManualBuyKeys.has(riverBuyKey) ? "手动买入" : "默认 100%"}</small></span><div class="input-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-riverBuy" data-side-pot-input="${riverBuyKey}" type="number" min="0" step="1" inputmode="decimal" value="${riverBuy}" /><span>¥</span></div></label>` : ""}
+          <label class="field"><span>转牌 outs / 赔率${turnSettled ? " · 已结算" : ""}</span><div class="side-outs-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-turnOuts" data-side-pot-input="${turnOutsKey}" type="number" min="0" max="17" step="1" inputmode="numeric" value="${turnOuts}" /><strong data-side-pot-odds="${player}:${sidePotIdentity(pot)}:turn">${oddsLabel(oddsForOuts(turnOuts))}</strong></div></label>
+          <label class="field"><span>转牌买入 <small class="side-buy-hint">${turnBuyLabel}</small></span><div class="input-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-turnBuy" data-side-pot-input="${turnBuyKey}" type="number" min="0" step="1" inputmode="decimal" value="${turnBuy}" /><span>¥</span></div></label>
+          <label class="field side-pot-river-field"><span>河牌 outs / 赔率${riverSettled ? " · 已结算" : ""}</span><div class="side-outs-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-riverOuts" data-side-pot-input="${riverOutsKey}" type="number" min="0" max="17" step="1" inputmode="numeric" value="${riverOuts}" /><strong data-side-pot-odds="${riverOddsKey}">${oddsLabel(oddsForOuts(riverOuts))}</strong></div></label>
+          <label class="field side-pot-river-field"><span>河牌买入 <small class="side-buy-hint">${sidePotManualBuyKeys.has(riverBuyKey) ? "手动买入" : "默认 100%"}</small></span><div class="input-wrap"><input id="side-pot-${rowKey.replace(":", "-")}-riverBuy" data-side-pot-input="${riverBuyKey}" type="number" min="0" step="1" inputmode="decimal" value="${riverBuy}" /><span>¥</span></div></label>
         </div>
         <div class="side-pot-quick-values" aria-label="${pot.label}常用买入比例">
-          <span>快捷</span>${[[1,"100%"],[.85,"85%"],[.75,"75%"],[.6,"60%"],[.5,"50%"]].map(([ratio,label]) => `<button type="button" data-side-pot-ratio="${ratio}" data-side-player="${player}" data-side-pot-index="${pot.index}" data-side-street="${primaryStreet}">${label}</button>`).join("")}
+          <span>转牌快捷</span>${[[1,"100%"],[.85,"85%"],[.75,"75%"],[.6,"60%"],[.5,"50%"]].map(([ratio,label]) => `<button type="button" ${turnSettled ? "disabled" : ""} data-side-pot-ratio="${ratio}" data-side-player="${player}" data-side-pot-index="${pot.index}" data-side-street="turn">${label}</button>`).join("")}
         </div>
-         ${showSecondary ? `<div class="side-pot-quick-values side-pot-river-quick" aria-label="${pot.label}河牌常用买入比例">
-          <span>河牌</span>${[[1,"100%"],[.85,"85%"],[.75,"75%"],[.6,"60%"],[.5,"50%"]].map(([ratio,label]) => `<button type="button" data-side-pot-ratio="${ratio}" data-side-player="${player}" data-side-pot-index="${pot.index}" data-side-street="river">${label}</button>`).join("")}
-        </div>` : ""}
+        <div class="side-pot-quick-values side-pot-river-quick" aria-label="${pot.label}河牌常用买入比例">
+          <span>河牌快捷</span>${[[1,"100%"],[.85,"85%"],[.75,"75%"],[.6,"60%"],[.5,"50%"]].map(([ratio,label]) => `<button type="button" ${riverSettled ? "disabled" : ""} data-side-pot-ratio="${ratio}" data-side-player="${player}" data-side-pot-index="${pot.index}" data-side-street="river">${label}</button>`).join("")}
+        </div>
+        <p class="side-pot-stage-status">${turnSettled ? `转牌历史买入 ${amount(Number(turnBuy) || 0)} 已计入结算` : "转牌当前估算"} · ${riverSettled ? "河牌结果已定格" : "河牌可继续调整"}</p>
       </article>`;
     }).filter(Boolean).join("");
     host.innerHTML = rows || `<p class="side-pot-insurance-empty">当前没有可争夺的池</p>`;
@@ -1304,14 +1469,10 @@ function renderSidePotInsuranceFields(side) {
 // control. Recommendations are recalculated when the outs or pool coverage
 // changes, so the displayed buy always matches the current odds.
 function ensureSidePotBuyDefaults(side) {
-  const isDouble = document.body.classList.contains("double-mode-active");
   const boardStreet = sideBoardStreet();
-  if (boardStreet >= 5) return false;
-  const postTurnSingle = !isDouble && boardStreet === 4;
-  const turnDealt = isDouble && boardStreet >= 4;
-  const stages = isDouble && !turnDealt
-    ? [{ street: "turn", outs: "turnOuts", buy: "turnBuy" }, ...(doubleRiverUnlocked ? [{ street: "river", outs: "riverOuts", buy: "riverBuy" }] : [])]
-    : [{ street: postTurnSingle || turnDealt ? "river" : "turn", outs: `${postTurnSingle || turnDealt ? "river" : "turn"}Outs`, buy: `${postTurnSingle || turnDealt ? "river" : "turn"}Buy` }];
+  const stages = boardStreet <= 3
+    ? [{ street: "turn", outs: "turnOuts", buy: "turnBuy" }, { street: "river", outs: "riverOuts", buy: "riverBuy" }]
+    : [{ street: "river", outs: "riverOuts", buy: "riverBuy" }];
   let changed = false;
   side.pots.forEach((pot) => {
     const leaders = sidePoolLeaders(pot, side.rankings);
@@ -1365,6 +1526,7 @@ function sidePotOutcome(player, pot, rankings, isDouble) {
   const isLeader = leaders.includes(player);
   const coverage = isLeader ? pot.amount / Math.max(leaders.length, 1) : 0;
   const stake = Number(pot.stakeByPlayer?.[player]) || 0;
+  const board = insuranceBoardValues();
   const base = {
     label: pot.label,
     potAmount: Number(pot.amount) || 0,
@@ -1373,7 +1535,7 @@ function sidePotOutcome(player, pot, rankings, isDouble) {
     leaders,
     participates,
     isLeader,
-    stage: boardStreet >= 5 ? "done" : ((!isDouble && boardStreet === 4) || (isDouble && boardStreet >= 4) ? "river" : "turn"),
+    stage: boardStreet >= 5 ? "done" : boardStreet >= 4 ? "river" : "turn",
     status: !participates ? "not-involved" : isLeader ? "leader" : "behind"
   };
   if (!participates) {
@@ -1390,33 +1552,6 @@ function sidePotOutcome(player, pot, rankings, isDouble) {
       riverOuts: 0,
       turnOdds: 0,
       riverOdds: 0
-    };
-  }
-  if (boardStreet >= 5) {
-    const row = isLeader
-      ? { label: "牌已发完 · 本池结算", probability: 1, buy: 0, payout: 0, receipt: coverage, net: coverage - stake }
-      : { label: "牌已发完 · 本池未领先", probability: 1, buy: 0, payout: 0, receipt: 0, net: -stake };
-    return {
-      ...base,
-      rows: [row],
-      expectedReceipt: row.receipt,
-      expectedDouble: row.net,
-      expectedNoInsurance: row.net,
-      totalBuy: 0,
-      turnBuy: 0,
-      riverBuy: 0,
-      turnOuts: 0,
-      riverOuts: 0,
-      turnOdds: 0,
-      riverOdds: 0,
-      turnProbability: 0,
-      riverProbability: 0,
-      bothSafeProbability: 1,
-      safeProbability: 1,
-      turnHitNet: row.net,
-      riverHitNet: row.net,
-      bothSafeNet: row.net,
-      singleSafeNet: row.net
     };
   }
   // A player who is not a pool leader has no insurance receipt in this view.
@@ -1439,10 +1574,6 @@ function sidePotOutcome(player, pot, rankings, isDouble) {
       riverOdds: 0
     };
   }
-  const postTurnSingle = !isDouble && boardStreet === 4;
-  const turnDealt = isDouble && boardStreet >= 4;
-  const riverOnly = postTurnSingle || turnDealt;
-  const primaryStreet = riverOnly ? "river" : "turn";
   const readOuts = (street) => {
     const parsed = Core.parseOuts(sidePotValue(player, pot, `${street}Outs`));
     return parsed.valid ? parsed.value : 0;
@@ -1456,92 +1587,51 @@ function sidePotOutcome(player, pot, rankings, isDouble) {
     const value = Number(fallback);
     return Number.isFinite(value) && value >= 0 ? Math.min(value, max) : 0;
   };
-  const primaryOuts = readOuts(primaryStreet);
-  const turnOuts = isDouble && !turnDealt ? readOuts("turn") : 0;
-  const riverOuts = isDouble ? readOuts("river") : postTurnSingle ? primaryOuts : 0;
-  const effectiveRiverOuts = riverOnly ? primaryOuts : riverOuts;
+  const turnOuts = readOuts("turn");
+  const riverOuts = readOuts("river");
   const turnOdds = oddsForOuts(turnOuts);
-  const doubleUnlocked = isDouble && doubleRiverUnlocked;
-  const riverOdds = (doubleUnlocked || riverOnly) ? oddsForOuts(effectiveRiverOuts) : 0;
-  const turnBuy = postTurnSingle || turnDealt ? 0 : readBuy(isDouble ? "turn" : primaryStreet, turnOdds);
-  const riverBuy = (doubleUnlocked || riverOnly) ? readBuy("river", riverOdds) : 0;
-  const { first, second } = insuranceDeckCounts();
-  const boundedProbability = (outs, denominator) => denominator > 0
-    ? Math.min(1, Math.max(0, Number(outs) || 0) / denominator)
-    : 0;
-  const turnProbability = boundedProbability(turnOuts, first);
-  const riverConditionalProbability = boundedProbability(effectiveRiverOuts, riverOnly ? first : second);
-  const riverProbability = doubleUnlocked
-    ? (1 - turnProbability) * riverConditionalProbability
-    : 0;
-  const bothSafeProbability = doubleUnlocked
-    ? (1 - turnProbability) * (1 - riverConditionalProbability)
-    : 0;
-  const makeRow = (label, probability, buy, payout, receipt) => ({
-    label,
-    probability,
-    buy,
-    payout,
-    receipt,
-    net: receipt - stake
+  const riverOdds = oddsForOuts(riverOuts);
+  const turnBuy = readBuy("turn", turnOdds);
+  const riverBuy = readBuy("river", riverOdds);
+  const poolHistory = insuranceHistory?.side?.[player]?.pools?.find((entry) => Number(entry.potIndex) === Number(pot.index));
+  const turnHitCards = poolHistory?.turnLossCards || [];
+  const riverHitCards = poolHistory?.riverLossCards || [];
+  const turnStatus = boardStreet >= 4
+    ? (turnHitCards.includes(board[3]) ? "hit" : "safe")
+    : "unseen";
+  const riverStatus = boardStreet >= 5
+    ? (riverHitCards.includes(board[4]) ? "hit" : "safe")
+    : "unseen";
+  const unknown = insuranceUnknownCards(boardStreet);
+  const settlement = calculateTwoStreetSettlement({
+    coverage,
+    stake,
+    turn: { outs: turnOuts, buy: turnBuy, status: turnStatus },
+    river: { outs: riverOuts, buy: riverBuy, status: riverStatus },
+    firstUnknownCards: unknown.first,
+    secondUnknownCards: unknown.second
   });
-  let rows;
-  let safeProbability;
-  if (riverOnly) {
-    const hitProbability = boundedProbability(effectiveRiverOuts, first);
-    safeProbability = 1 - hitProbability;
-    rows = [
-      makeRow("河牌爆保险", hitProbability, riverBuy, riverBuy * riverOdds, riverBuy * riverOdds),
-      makeRow("河牌安全", safeProbability, riverBuy, 0, coverage - riverBuy)
-    ];
-  } else if (isDouble && doubleUnlocked) {
-    rows = [
-      makeRow("转牌爆保险（终局）", turnProbability, turnBuy, turnBuy * turnOdds, turnBuy * turnOdds),
-      makeRow("转牌安全 · 河牌爆保险", riverProbability, turnBuy + riverBuy, riverBuy * riverOdds, riverBuy * riverOdds - turnBuy),
-      makeRow("转牌河牌双安全", bothSafeProbability, turnBuy + riverBuy, 0, coverage - turnBuy - riverBuy)
-    ];
-    safeProbability = bothSafeProbability;
-  } else if (isDouble) {
-    safeProbability = 1 - turnProbability;
-    rows = [
-      makeRow("转牌爆保险（终局）", turnProbability, turnBuy, turnBuy * turnOdds, turnBuy * turnOdds),
-      makeRow("转牌安全 · 等待河牌（暂估）", safeProbability, turnBuy, 0, coverage - turnBuy)
-    ];
-  } else {
-    const hitProbability = postTurnSingle ? boundedProbability(riverOuts, first) : turnProbability;
-    const buy = postTurnSingle ? riverBuy : turnBuy;
-    const odds = postTurnSingle ? riverOdds : turnOdds;
-    const streetLabel = postTurnSingle ? "河牌" : "转牌";
-    safeProbability = 1 - hitProbability;
-    rows = [
-      makeRow(`${streetLabel}爆保险`, hitProbability, buy, buy * odds, buy * odds),
-      makeRow(`${streetLabel}安全`, safeProbability, buy, 0, coverage - buy)
-    ];
-  }
-  const expectedReceipt = rows.reduce((sum, row) => sum + row.probability * row.receipt, 0);
-  const expectedDouble = expectedReceipt - stake;
-  const expectedNoInsurance = safeProbability * coverage - stake;
   return {
     ...base,
-    rows,
-    expectedReceipt,
-    expectedDouble,
-    expectedNoInsurance,
-    totalBuy: turnBuy + riverBuy,
-    turnBuy,
-    riverBuy,
-    turnOdds,
-    riverOdds,
-    turnOuts,
-    riverOuts,
-    turnProbability,
-    riverProbability,
-    bothSafeProbability,
-    safeProbability,
-    turnHitNet: rows[0]?.net || -stake,
-    riverHitNet: rows[1]?.net || -stake,
-    bothSafeNet: rows[2]?.net || rows[1]?.net || -stake,
-    singleSafeNet: rows[rows.length - 1]?.net || -stake
+    rows: settlement.rows,
+    expectedReceipt: settlement.expectedReceipt,
+    expectedDouble: settlement.expectedNet,
+    expectedNoInsurance: settlement.expectedNoInsurance,
+    totalBuy: settlement.totalBuy,
+    turnBuy: settlement.turnBuy,
+    riverBuy: settlement.riverBuy,
+    turnOdds: settlement.turnOdds,
+    riverOdds: settlement.riverOdds,
+    turnOuts: settlement.turnOuts,
+    riverOuts: settlement.riverOuts,
+    turnProbability: settlement.turnProbability,
+    riverProbability: settlement.riverProbability,
+    bothSafeProbability: settlement.bothSafeProbability,
+    safeProbability: settlement.safeProbability,
+    turnHitNet: settlement.rows[0]?.net || -stake,
+    riverHitNet: settlement.rows[1]?.net || -stake,
+    bothSafeNet: settlement.rows[2]?.net || settlement.rows[1]?.net || -stake,
+    singleSafeNet: settlement.rows[settlement.rows.length - 1]?.net || -stake
   };
 }
 
@@ -1664,24 +1754,38 @@ function applyAutoSideBuyerState(side, boardValues, players) {
   if (poolMode !== "side") return;
   const boardStreet = sideBoardStreet();
   if (boardStreet >= 5) {
-    sideBuyerOutAnalysis = {};
-    Object.keys(sidePotInputState).forEach((key) => {
-      if (key.endsWith(":turnOuts") || key.endsWith(":riverOuts")) delete sidePotInputState[key];
-    });
-    PLAYER_KEYS.forEach((key) => { els.sideBuyerEnabled[key].checked = false; });
+    // Keep both street values and buys visible after the final board card is
+    // dealt. They are historical inputs for the final settlement, not stale
+    // form data to discard.
     sideBuyerMarkupSignature = "";
     calculateSidePool({ capture: false });
-    queueDraftSave();
     return;
   }
   const autoOuts = calculateSideBuyerOuts(side, boardValues, players);
   sideBuyerOutAnalysis = autoOuts;
+  // Keep flop turn-loss cards when the board advances and fresh river cards
+  // are calculated. This lets final settlement identify a historical hit.
+  const previousSideHistory = insuranceHistory.side || {};
+  insuranceHistory.side = Object.fromEntries(Object.entries(autoOuts).map(([key, value]) => {
+    const previousPools = previousSideHistory[key]?.pools || [];
+    const pools = (value?.pools || []).map((pool) => {
+      const previous = previousPools.find((entry) => Number(entry.potIndex) === Number(pool.potIndex));
+      return {
+        ...pool,
+        turnLossCards: pool.turnLossCards?.length ? pool.turnLossCards : (previous?.turnLossCards || []),
+        riverLossCards: pool.riverLossCards?.length ? pool.riverLossCards : (previous?.riverLossCards || [])
+      };
+    });
+    return [key, value ? { ...value, pools } : value];
+  }));
   const street = boardStreet === 4 ? 4 : 3;
 
-  // Per-pot outs are the source of truth. Clear stale automatic values first,
-  // then derive the aggregate buyer fields from the fresh per-pot analysis.
+  // Per-pot outs are the source of truth. Clear only the street being
+  // recalculated; a dealt turn's values are historical inputs for the river
+  // settlement and must survive this refresh.
+  const refreshedField = street === 3 ? ":turnOuts" : ":riverOuts";
   Object.keys(sidePotInputState).forEach((key) => {
-    if (key.endsWith(":turnOuts") || key.endsWith(":riverOuts")) delete sidePotInputState[key];
+    if (key.endsWith(refreshedField)) delete sidePotInputState[key];
   });
   PLAYER_KEYS.forEach((key) => {
     const auto = autoOuts[key];
@@ -1772,49 +1876,83 @@ function doubleRow(label, turnBuy, riverBuy, payout, net, hit = false) {
 function calculateDouble() {
   updateDoubleStageUI();
   const turn = updateOddsControls(els.turnRange, els.turnScale, els.turnOuts, els.turnOdds, els.turnHint, "转牌");
-  const river = doubleRiverUnlocked
-    ? updateOddsControls(els.riverRange, els.riverScale, els.riverOuts, els.riverOdds, els.riverHint, "河牌")
-    : { outs: 0, odds: 0 };
-  // updateOddsControls rebuilds the scale buttons, so apply the lock state
-  // once more to the newly created controls.
+  const river = updateOddsControls(els.riverRange, els.riverScale, els.riverOuts, els.riverOdds, els.riverHint, "河牌");
   updateDoubleStageUI();
+  const boardStreet = sideBoardStreet();
   const { pot, stake } = getBaseAmounts(els.doublePot, els.doubleStake);
   const hasAmounts = pot > 0 || stake > 0;
-  const turnBuy = boundedBuy(els.turnBuy, turn.odds > 0 ? pot / turn.odds : 0);
-  const riverBuy = doubleRiverUnlocked ? boundedBuy(els.riverBuy, river.odds > 0 ? pot / river.odds : 0) : 0;
-  const turnPayout = turnBuy * turn.odds;
-  const riverPayout = riverBuy * river.odds;
-  const { first, second } = insuranceDeckCounts();
-  const turnHitProbability = turn.odds > 0 ? turn.outs / first : 0;
-  const riverHitProbability = doubleRiverUnlocked && river.odds > 0 ? (1 - turnHitProbability) * river.outs / second : 0;
-  const bothSafeProbability = doubleRiverUnlocked ? (1 - turnHitProbability) * (river.odds > 0 ? 1 - river.outs / second : 1) : 0;
-  const turnHitNet = -stake + turnPayout;
-  const riverHitNet = -stake - turnBuy + riverPayout;
-  const bothSafeNet = pot - stake - turnBuy - riverBuy;
-  const expectedNet = doubleRiverUnlocked ? turnHitProbability * turnHitNet
-    + riverHitProbability * riverHitNet
-    + bothSafeProbability * bothSafeNet : turnHitProbability * turnHitNet + (1 - turnHitProbability) * (pot - stake - turnBuy);
-  const noInsuranceExpected = turnHitProbability * (-stake)
-    + (doubleRiverUnlocked ? riverHitProbability * (-stake) + bothSafeProbability * (pot - stake) : (1 - turnHitProbability) * (pot - stake));
-  const turnOnlyExpected = turnHitProbability * turnHitNet
-    + (1 - turnHitProbability) * (pot - stake - turnBuy);
+  rememberInsuranceInputs(boardStreet);
+  const historicalTurn = boardStreet >= 4 ? insuranceHistory.turn : null;
+  const historicalRiver = boardStreet >= 5 ? insuranceHistory.river : null;
+  const turnOuts = historicalTurn ? normalizedOuts(historicalTurn.outs, turn.outs) : turn.outs;
+  const riverOuts = historicalRiver ? normalizedOuts(historicalRiver.outs, river.outs) : river.outs;
+  const turnOdds = oddsForOuts(turnOuts);
+  const riverOdds = oddsForOuts(riverOuts);
+  const cappedHistoricalBuy = (snapshot, odds) => {
+    if (!snapshot) return null;
+    const raw = Math.max(0, Number(snapshot.buy) || 0);
+    const maximum = odds > 0 ? pot / odds : 0;
+    return Math.min(raw, Math.max(0, maximum));
+  };
+  const turnBuy = cappedHistoricalBuy(historicalTurn, turnOdds) ?? boundedBuy(els.turnBuy, turnOdds > 0 ? pot / turnOdds : 0);
+  const riverBuy = cappedHistoricalBuy(historicalRiver, riverOdds) ?? boundedBuy(els.riverBuy, riverOdds > 0 ? pot / riverOdds : 0);
+  if (historicalTurn && els.turnOdds) els.turnOdds.textContent = oddsLabel(turnOdds);
+  if (historicalRiver && els.riverOdds) els.riverOdds.textContent = oddsLabel(riverOdds);
+  const unknown = insuranceUnknownCards(boardStreet);
+  const settlement = calculateTwoStreetSettlement({
+    coverage: pot,
+    stake,
+    turn: { outs: turnOuts, buy: turnBuy, status: insuranceStreetStatus("turn", boardStreet) },
+    river: { outs: riverOuts, buy: riverBuy, status: insuranceStreetStatus("river", boardStreet) },
+    firstUnknownCards: unknown.first,
+    secondUnknownCards: unknown.second
+  });
+  const turnPayout = settlement.turnPayout;
+  const riverPayout = settlement.riverPayout;
+  const turnHitProbability = settlement.turnProbability;
+  const riverHitProbability = settlement.riverProbability;
+  const bothSafeProbability = settlement.bothSafeProbability;
+  const expectedNet = settlement.expectedNet;
+  const noInsuranceExpected = settlement.expectedNoInsurance;
+  const turnOnlySettlement = calculateTwoStreetSettlement({
+    coverage: pot,
+    stake,
+    turn: { outs: turnOuts, buy: turnBuy, status: insuranceStreetStatus("turn", boardStreet) },
+    river: { outs: 0, buy: 0, status: "unseen" },
+    firstUnknownCards: unknown.first,
+    secondUnknownCards: unknown.second
+  });
+  const turnOnlyExpected = turnOnlySettlement.expectedNet;
 
   els.turnPayout.textContent = hasAmounts ? amount(turnPayout) : "—";
-  els.riverPayout.textContent = doubleRiverUnlocked && hasAmounts ? amount(riverPayout) : "—";
-  els.doubleSummaryOdds.textContent = doubleRiverUnlocked ? `转牌 ${turn.outs} outs · 河牌 ${river.outs} outs` : `转牌 ${turn.outs} outs · 河牌待计算`;
+  els.riverPayout.textContent = hasAmounts ? amount(riverPayout) : "—";
+  const streetLabel = boardStreet >= 5 ? "牌已发完" : boardStreet === 4 ? "转牌已发 · 河牌结算" : "转牌 + 河牌";
+  els.doubleSummaryOdds.textContent = `${streetLabel} · 转牌 ${turnOuts} outs · 河牌 ${riverOuts} outs`;
   els.doubleTurnProbability.textContent = percentage(turnHitProbability);
-  els.doubleRiverProbability.textContent = doubleRiverUnlocked ? percentage(riverHitProbability) : "—";
-  els.doubleBothSafeProbability.textContent = doubleRiverUnlocked ? percentage(bothSafeProbability) : "—";
+  els.doubleRiverProbability.textContent = percentage(riverHitProbability);
+  els.doubleBothSafeProbability.textContent = percentage(bothSafeProbability);
   els.doubleTurnMeter.style.width = `${turnHitProbability * 100}%`;
-  els.doubleRiverMeter.style.width = doubleRiverUnlocked ? `${riverHitProbability * 100}%` : "0%";
-  els.doubleBothSafeMeter.style.width = doubleRiverUnlocked ? `${bothSafeProbability * 100}%` : "0%";
+  els.doubleRiverMeter.style.width = `${riverHitProbability * 100}%`;
+  els.doubleBothSafeMeter.style.width = `${bothSafeProbability * 100}%`;
   els.doubleExpectedValue.textContent = hasAmounts ? money(expectedNet) : "—";
   els.doubleExpectedValue.classList.toggle("positive", expectedNet >= 0);
   els.doubleExpectedValue.classList.toggle("negative", expectedNet < 0);
+  updateInsuranceStatusUI(boardStreet, hasAmounts);
+  [
+    [els.doublePlannedBuy, settlement.plannedBuy, amount],
+    [els.doubleWorstNet, settlement.worstNet, money],
+    [els.doubleBestNet, settlement.bestNet, money],
+    [els.doubleNoInsurance, noInsuranceExpected, money]
+  ].forEach(([element, value, formatter]) => {
+    if (!element) return;
+    element.textContent = hasAmounts ? formatter(value) : "—";
+    element.classList.toggle("positive", Number(value) >= 0);
+    element.classList.toggle("negative", Number(value) < 0);
+  });
   const strategies = [
     { label: "不买保险", value: noInsuranceExpected },
     { label: "只买转牌", value: turnOnlyExpected },
-    ...(doubleRiverUnlocked ? [{ label: "两街都买", value: expectedNet }] : [])
+    { label: "两街都买", value: expectedNet }
   ];
   const bestStrategy = Math.max(...strategies.map((strategy) => strategy.value));
   if (els.doubleStrategyRows) {
@@ -1826,20 +1964,25 @@ function calculateDouble() {
       </div>`).join("") : `<div class="strategy-empty">请输入底池大小和个人投入后显示对比</div>`;
   }
 
-  els.doubleRows.innerHTML = hasAmounts ? (doubleRiverUnlocked ? [
-    doubleRow("转牌爆保险", amount(turnBuy), "不买", amount(turnPayout), turnHitNet, true),
-    doubleRow("河牌爆保险", amount(turnBuy), amount(riverBuy), amount(riverPayout), riverHitNet, true),
-    doubleRow("两次都不爆", amount(turnBuy), amount(riverBuy), amount(0), bothSafeNet)
-  ].join("") : [
-    doubleRow("转牌爆保险", amount(turnBuy), "不买", amount(turnPayout), turnHitNet, true),
-    doubleRow("转牌未爆 · 等待河牌", amount(turnBuy), "待计算", "—", pot - stake - turnBuy)
-  ].join("")) : `<tr><td colspan="5" class="table-empty">请输入底池大小和个人投入后显示结果</td></tr>`;
+  const rowBuyColumns = (row) => {
+    if (row.key === "turnHit") return [turnBuy, 0];
+    if (row.key === "riverPending") return [turnBuy, 0];
+    return [turnBuy, riverBuy];
+  };
+  els.doubleRows.innerHTML = hasAmounts
+    ? settlement.rows.map((row) => {
+      const [turnColumn, riverColumn] = rowBuyColumns(row);
+      return doubleRow(row.label, amount(turnColumn), riverColumn > 0 ? amount(riverColumn) : "不买", row.payout > 0 ? amount(row.payout) : "—", row.net, row.key === "turnHit" || row.key === "riverHit");
+    }).join("")
+    : `<tr><td colspan="5" class="table-empty">请输入底池大小和个人投入后显示结果</td></tr>`;
 }
 
 function reset() {
   window.clearTimeout(draftSaveTimer);
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage is optional */ }
-  doubleRiverUnlocked = false;
+  doubleRiverUnlocked = true;
+  insuranceHistory = { turn: null, river: null, side: null };
+  lastInsuranceBoardStreet = 3;
   callSource = "manual";
   callAutoAnalysis = null;
   [els.pot, els.doublePot, els.stake, els.doubleStake, els.customBuy, els.turnBuy, els.riverBuy].forEach((input) => { input.value = ""; });
@@ -1916,7 +2059,7 @@ function setPoolMode(mode) {
     els.doublePot.value = side.coverageByPlayer[fallbackBuyer];
     els.doubleStake.value = side.effectiveStakes[fallbackBuyer];
   }
-  if (els.doubleWorkspace.classList.contains("is-hidden")) calculateSingle();
+  if (document.body.classList.contains("call-mode-active")) calculateCall();
   else calculateDouble();
   analyzeHandSituation(false);
   queueDraftSave();
@@ -1924,24 +2067,35 @@ function setPoolMode(mode) {
 
 function setMode(mode) {
   const isCall = mode === "call";
-  const isDouble = mode === "double";
+  const normalizedMode = isCall ? "call" : "insurance";
+  const isDouble = !isCall;
   document.body.classList.toggle("double-mode-active", isDouble);
+  document.body.classList.toggle("insurance-mode-active", isDouble);
   document.body.classList.toggle("call-mode-active", isCall);
   syncHandStreetToMode(isDouble);
-  els.singleWorkspace.classList.toggle("is-hidden", isDouble);
-  els.doubleWorkspace.classList.toggle("is-hidden", !isDouble);
+  // `singleWorkspace` is a legacy compatibility surface. All insurance
+  // modes render in the unified double workspace; call remains separate.
+  els.singleWorkspace.classList.add("is-hidden");
+  els.singleWorkspace.setAttribute("aria-hidden", "true");
+  els.doubleWorkspace.classList.toggle("is-hidden", isCall);
+  els.doubleWorkspace.setAttribute("aria-hidden", String(isCall));
   els.callWorkspace.classList.toggle("is-hidden", !isCall);
+  els.callWorkspace.setAttribute("aria-hidden", String(!isCall));
   els.modeButtons.forEach((button) => {
-    const active = button.dataset.mode === mode;
+    const buttonMode = button.dataset.mode === "call" ? "call" : "insurance";
+    const active = buttonMode === normalizedMode;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", String(active));
+    if (button.dataset.mode === "double") {
+      button.hidden = true;
+      button.setAttribute("aria-hidden", "true");
+    }
   });
   // Mode changes also change which dynamic side-pot stages are editable.
   // Re-render them before the hand panel's incomplete-state early return.
   if (poolMode === "side") calculateSidePool({ capture: false });
-  if (isDouble) calculateDouble();
-  else if (isCall) calculateCall();
-  else calculateSingle();
+  if (isCall) calculateCall();
+  else calculateDouble();
   if (poolMode === "side") calculateSidePool({ capture: false });
   updateCallSourceUI();
   analyzeHandSituation(false);
@@ -1974,17 +2128,29 @@ function copySingleResults() {
 
 function copyDoubleResults() {
   const { pot, stake } = getBaseAmounts(els.doublePot, els.doubleStake);
-  const turnOuts = normalizedOuts(els.turnRange.value, 1);
-  const riverOuts = normalizedOuts(els.riverRange.value, 1);
+  const boardStreet = sideBoardStreet();
+  const turnSnapshot = boardStreet >= 4 ? insuranceHistory.turn : null;
+  const riverSnapshot = boardStreet >= 5 ? insuranceHistory.river : null;
+  const turnOuts = turnSnapshot ? normalizedOuts(turnSnapshot.outs, 0) : normalizedOuts(els.turnRange.value, 1);
+  const riverOuts = riverSnapshot ? normalizedOuts(riverSnapshot.outs, 0) : normalizedOuts(els.riverRange.value, 1);
   const turnOdds = oddsForOuts(turnOuts);
   const riverOdds = oddsForOuts(riverOuts);
-  const turnBuy = boundedBuy(els.turnBuy, turnOdds > 0 ? pot / turnOdds : 0);
-  const riverBuy = boundedBuy(els.riverBuy, riverOdds > 0 ? pot / riverOdds : 0);
+  const turnBuy = turnSnapshot ? Math.min(Math.max(0, Number(turnSnapshot.buy) || 0), turnOdds > 0 ? pot / turnOdds : 0) : boundedBuy(els.turnBuy, turnOdds > 0 ? pot / turnOdds : 0);
+  const riverBuy = riverSnapshot ? Math.min(Math.max(0, Number(riverSnapshot.buy) || 0), riverOdds > 0 ? pot / riverOdds : 0) : boundedBuy(els.riverBuy, riverOdds > 0 ? pot / riverOdds : 0);
+  const settlement = calculateTwoStreetSettlement({
+    coverage: pot,
+    stake,
+    turn: { outs: turnOuts, buy: turnBuy, status: insuranceStreetStatus("turn", boardStreet) },
+    river: { outs: riverOuts, buy: riverBuy, status: insuranceStreetStatus("river", boardStreet) },
+    firstUnknownCards: insuranceUnknownCards(boardStreet).first,
+    secondUnknownCards: insuranceUnknownCards(boardStreet).second
+  });
   writeCopy(els.doubleCopy, [
-    "德州保险盈利计算器 / 两次保险",
+    "德州保险盈利计算器 / 统一两街保险",
     `底池 ${amount(pot)}，个人投入 ${amount(stake)}`,
     `转牌买入 ${amount(turnBuy)}（${oddsLabel(turnOdds)}），河牌买入 ${amount(riverBuy)}（${oddsLabel(riverOdds)}）`,
-    `转牌爆 ${money(-stake + turnBuy * turnOdds)}；河牌爆 ${money(-stake - turnBuy + riverBuy * riverOdds)}；两次不爆 ${money(pot - stake - turnBuy - riverBuy)}`
+    `计划买入 ${amount(settlement.plannedBuy)}；期望净盈亏 ${money(settlement.expectedNet)}；不买保险 ${money(settlement.expectedNoInsurance)}`,
+    settlement.rows.map((row) => `${row.label} ${percentage(row.probability)} · 净盈亏 ${money(row.net)}`).join("\n")
   ].join("\n"));
 }
 
@@ -2001,10 +2167,10 @@ els.stake.addEventListener("input", () => {
   els.doubleStake.value = els.stake.value;
   calculateSingle();
 });
-els.turnRange.addEventListener("input", calculateDouble);
-els.riverRange.addEventListener("input", calculateDouble);
-els.turnBuy.addEventListener("input", calculateDouble);
-els.riverBuy.addEventListener("input", calculateDouble);
+els.turnRange.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
+els.riverRange.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
+els.turnBuy.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
+els.riverBuy.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
 els.doublePot.addEventListener("input", () => {
   els.pot.value = els.doublePot.value;
   calculateDouble();
@@ -2110,10 +2276,8 @@ els.handStreet.addEventListener("change", () => {
 });
 els.applyCalculatedOuts.addEventListener("click", () => analyzeHandSituation(true));
 els.doubleRiverAdvance?.addEventListener("click", () => {
-  doubleRiverUnlocked = true;
-  calculateDouble();
-  if (poolMode === "side") calculateSidePool({ capture: false });
-  queueDraftSave();
+  // Legacy hidden control retained only for old deep links; street changes
+  // now come from selecting 3/4/5 public cards directly.
 });
 els.autoRankFromHands?.addEventListener("click", autoRankFromSelectedHands);
 els.cardPickerGrid?.addEventListener("click", (event) => {
@@ -2228,8 +2392,8 @@ renderHandInputs();
 const params = new URLSearchParams(window.location.search);
 const requestedPool = params.has("pool") ? (params.get("pool") === "side" ? "side" : "single") : (savedDraft?.poolMode || "single");
 const requestedMode = params.has("preview")
-  ? (params.get("preview") === "double" ? "double" : params.get("preview") === "call" ? "call" : "single")
-  : (savedDraft?.mode || "single");
+  ? (params.get("preview") === "call" ? "call" : "insurance")
+  : (savedDraft?.mode === "call" ? "call" : "insurance");
 setPoolMode(requestedPool);
 setMode(requestedMode);
 if (savedDraft) {
