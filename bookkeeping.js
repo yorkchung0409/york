@@ -62,11 +62,18 @@
       if (btn.id === 'bookkeepingModeButton') return;
       btn.addEventListener('click', () => {
         const bkWs = document.getElementById('bookkeepingWorkspace');
-        if (!bkWs.classList.contains('is-hidden')) {
+        if (bkWs.style.display === 'flex' || !bkWs.classList.contains('is-hidden')) {
+          // 隐藏记账面板
+          bkWs.style.display = '';
           bkWs.classList.add('is-hidden');
-          bkWs.setAttribute('aria-hidden', 'true');
           bkBtn.classList.remove('is-active');
           bkBtn.setAttribute('aria-selected', 'false');
+          // 恢复保险面板的display（清除inline style，让CSS的is-hidden类生效）
+          const restoreIds = ['handPanel', 'doubleWorkspace', 'callWorkspace', 'sidePotPanel'];
+          restoreIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.style.display = ''; }
+          });
           // 恢复 pool-mode-row 和 rule-note
           const poolRow = document.querySelector('.pool-mode-row');
           if (poolRow) poolRow.style.display = '';
@@ -81,11 +88,11 @@
     const bkBtn = document.getElementById('bookkeepingModeButton');
     const bkWorkspace = document.getElementById('bookkeepingWorkspace');
 
-    // 隐藏所有保险相关面板
+    // 隐藏所有保险相关面板（直接用style.display，确保可靠隐藏）
     const hideIds = ['handPanel', 'doubleWorkspace', 'callWorkspace', 'sidePotPanel'];
     hideIds.forEach(id => {
       const el = document.getElementById(id);
-      if (el) { el.classList.add('is-hidden'); el.setAttribute('aria-hidden', 'true'); }
+      if (el) { el.style.display = 'none'; }
     });
 
     // 隐藏 pool-mode-row 和 rule-note
@@ -95,8 +102,8 @@
     if (ruleNote) ruleNote.style.display = 'none';
 
     // 显示记账面板
+    bkWorkspace.style.display = 'flex';
     bkWorkspace.classList.remove('is-hidden');
-    bkWorkspace.setAttribute('aria-hidden', 'false');
 
     // 更新按钮状态
     document.querySelectorAll('.mode-button').forEach(btn => {
