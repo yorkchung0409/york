@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=1.0.0" />
+    <link rel="stylesheet" href="styles.css?v=1.0.1" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,7 +18,7 @@
         <div class="brand-lockup">
           <img class="brand-mark brand-icon" src="icons/icon-180-v38.png" alt="" />
           <div>
-          <p class="eyebrow">德州工具(V1.0.0)</p>
+          <p class="eyebrow">德州工具(V1.0.1)</p>
             <h1>德州保险盈利计算器</h1>
           </div>
         </div>
@@ -37,6 +37,7 @@
         <button class="mode-button is-active insurance-mode-button" id="singleModeButton" type="button" role="tab" aria-selected="true" data-mode="single">保险</button>
         <button class="mode-button legacy-mode-button" id="doubleModeButton" type="button" role="tab" aria-selected="false" data-mode="double" tabindex="-1" aria-hidden="true">两次保险</button>
         <button class="mode-button call-mode-button" id="callModeButton" type="button" role="tab" aria-selected="false" data-mode="call">胜率和赔率</button>
+        <button class="mode-button bookkeeping-mode-button" id="bookkeepingModeButton" type="button" role="tab" aria-selected="false">记账</button>
       </div>
 
       <div class="pool-mode-row" role="group" aria-label="保险底池类型">
@@ -439,6 +440,63 @@
           <div><strong>计算口径</strong><p>底池赔率 = 跟注金额 ÷ 跟注后底池；EV = equity × 跟注前底池 − (1 − equity) × 跟注金额。已投入金额只展示，不参与当前决策。</p></div>
         </article>
       </section>
+
+      <!-- ========== 记账工作区 ========== -->
+      <section class="bookkeeping-workspace is-hidden" id="bookkeepingWorkspace" data-workspace="bookkeeping" aria-labelledby="bookkeepingTitle">
+        <div class="bk-stats-grid">
+          <div class="bk-stat-item"><span class="bk-stat-label">总场次</span><span class="bk-stat-value" id="bkStatSessions">0</span></div>
+          <div class="bk-stat-item"><span class="bk-stat-label">总时长</span><span class="bk-stat-value" id="bkStatHours">0h</span></div>
+          <div class="bk-stat-item"><span class="bk-stat-label">总盈亏</span><span class="bk-stat-value" id="bkStatProfit">0</span></div>
+          <div class="bk-stat-item"><span class="bk-stat-label">时薪</span><span class="bk-stat-value" id="bkStatHourly">0</span></div>
+          <div class="bk-stat-item"><span class="bk-stat-label">胜率</span><span class="bk-stat-value" id="bkStatWinRate">0%</span></div>
+          <div class="bk-stat-item"><span class="bk-stat-label">场均盈亏</span><span class="bk-stat-value" id="bkStatAvg">0</span></div>
+        </div>
+        <button class="bk-primary-btn" id="bkAddRecordBtn" type="button">+ 记一笔</button>
+        <div class="bk-filter-bar">
+          <select id="bkFilterYear"><option value="">全部年份</option></select>
+          <select id="bkFilterMonth"><option value="">全部月份</option></select>
+          <select id="bkFilterDay"><option value="">全部日期</option></select>
+          <select id="bkFilterTag"><option value="">全部标签</option></select>
+          <select id="bkFilterBlind"><option value="">全部盲注</option></select>
+        </div>
+        <article class="panel bk-records-panel">
+          <div class="panel-heading compact-heading">
+            <div><p class="section-kicker">记录明细</p><h3 id="bookkeepingTitle">打牌记账</h3></div>
+            <span class="currency-badge" id="bkRecordCount">0 条</span>
+          </div>
+          <div class="bk-list-controls" id="bkListControls"></div>
+          <div id="bkRecordList"></div>
+        </article>
+        <article class="panel bk-peak-panel">
+          <div class="panel-heading compact-heading"><div><p class="section-kicker">峰值排行</p><h3>输最多 / 赢最多 前5局</h3></div></div>
+          <div id="bkPeakListLose"></div>
+          <div id="bkPeakListWin" style="margin-top:14px;"></div>
+        </article>
+        <article class="panel bk-group-panel">
+          <div class="panel-heading compact-heading"><div><p class="section-kicker">分组盈亏</p><h3>按维度汇总</h3></div></div>
+          <div class="bk-group-toggle">
+            <button class="bk-group-btn is-active" id="bkGrpBlind" type="button">按盲注</button>
+            <button class="bk-group-btn" id="bkGrpTag" type="button">按标签</button>
+          </div>
+          <div id="bkGroupStats"></div>
+        </article>
+        <article class="panel bk-chart-panel">
+          <div class="panel-heading compact-heading"><div><p class="section-kicker">盈亏图表</p><h3>随筛选实时刷新</h3></div></div>
+          <div class="bk-chart-toggle">
+            <button class="bk-chart-btn is-active" id="bkChartTrend" type="button">累计走势</button>
+            <button class="bk-chart-btn" id="bkChartGroup" type="button">分组对比</button>
+          </div>
+          <div id="bkChartBox"></div>
+        </article>
+        <article class="panel bk-mgmt-panel">
+          <div class="panel-heading compact-heading"><div><p class="section-kicker">数据管理</p><h3>导入导出</h3></div></div>
+          <div class="bk-data-mgmt">
+            <button class="bk-mgmt-btn" id="bkExportBtn" type="button">导出数据</button>
+            <button class="bk-mgmt-btn" id="bkImportBtn" type="button">导入 Excel/CSV</button>
+            <button class="bk-mgmt-btn bk-danger" id="bkClearBtn" type="button">清空数据</button>
+          </div>
+        </article>
+      </section>
     </main>
     <div class="card-picker-backdrop is-hidden" id="cardPickerBackdrop">
       <section class="card-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="cardPickerTitle">
@@ -461,8 +519,55 @@
         </div>
       </section>
     </div>
-    <script src="poker-core.js?v=1.0.0"></script>
-    <script src="app-hand-analysis.js?v=1.0.0"></script>
-    <script src="app.js?v=1.0.0"></script>
+
+    <!-- ========== 记账弹窗 ========== -->
+    <div class="bk-modal-backdrop is-hidden" id="bkRecordOverlay">
+      <section class="bk-modal" role="dialog" aria-modal="true">
+        <button class="bk-modal-close" id="bkRecordClose" type="button" aria-label="关闭">×</button>
+        <h3 class="bk-modal-title" id="bkRecordFormTitle">记一笔</h3>
+        <div class="bk-win-lose-toggle">
+          <button class="bk-wl-btn bk-win is-active" id="bkBtnWin" type="button">赢</button>
+          <button class="bk-wl-btn bk-lose" id="bkBtnLose" type="button">输</button>
+        </div>
+        <label class="field"><span>金额 (¥)</span><div class="input-wrap"><input id="bkRecAmount" type="number" inputmode="decimal" min="0" placeholder="0" /></div></label>
+        <label class="field"><span>时长（小时）</span><div class="input-wrap"><input id="bkRecDuration" type="number" inputmode="decimal" min="0" step="0.25" placeholder="例如 1.5" /></div></label>
+        <div class="field"><span>盲注级别</span><div class="bk-blind-select" id="bkBlindSelect"></div><button class="bk-add-option" id="bkOpenBlindMgr" type="button">+ 管理盲注</button></div>
+        <div class="field"><span>标签</span><div class="bk-tag-select" id="bkTagSelect"></div></div>
+        <label class="field"><span>日期</span><div class="input-wrap"><input id="bkRecDate" type="date" /></div></label>
+        <label class="field"><span>备注</span><div class="input-wrap"><input id="bkRecNote" type="text" placeholder="选填，50字以内" maxlength="50" /></div></label>
+        <button class="bk-primary-btn" id="bkSaveRecordBtn" type="button">保存</button>
+      </section>
+    </div>
+
+    <div class="bk-modal-backdrop is-hidden" id="bkBlindOverlay">
+      <section class="bk-modal bk-modal-sm" role="dialog" aria-modal="true">
+        <button class="bk-modal-close" id="bkBlindClose" type="button" aria-label="关闭">×</button>
+        <h3 class="bk-modal-title">管理盲注级别</h3>
+        <label class="field"><span>添加盲注（如 1/2、0.5/1、5/10）</span><div class="input-wrap"><input id="bkNewBlind" type="text" placeholder="例如 1/2" /></div></label>
+        <button class="bk-primary-btn" id="bkAddBlindBtn" type="button">添加</button>
+        <div class="bk-option-list" id="bkBlindList"></div>
+      </section>
+    </div>
+
+    <div class="bk-modal-backdrop is-hidden" id="bkImportOverlay">
+      <section class="bk-modal bk-modal-wide" role="dialog" aria-modal="true">
+        <button class="bk-modal-close" id="bkImportClose" type="button" aria-label="关闭">×</button>
+        <h3 class="bk-modal-title">导入数据</h3>
+        <p class="bk-import-tip">从小程序/微信导出 Excel/CSV，点「上传文件」直接选；或在电脑打开后全选复制粘到下方。表格会自动识别列（日期/输赢/金额/时长/盲注/标签/备注）。</p>
+        <div class="bk-import-toolbar">
+          <label class="bk-file-btn">上传文件<input id="bkImportFileInput" type="file" accept=".xlsx,.xls,.csv,.txt" hidden /></label>
+          <span id="bkImportFileName"></span>
+        </div>
+        <textarea class="bk-paste-area" id="bkPasteInput" placeholder="在此粘贴：可从 Excel 复制整表（制表符分隔），或一行一条自由文本…"></textarea>
+        <button class="bk-primary-btn" id="bkParseImportBtn" type="button">解析预览</button>
+        <div id="bkPastePreview"></div>
+      </section>
+    </div>
+
+    <script src="poker-core.js?v=1.0.1"></script>
+    <script src="app-hand-analysis.js?v=1.0.1"></script>
+    <script src="app.js?v=1.0.1"></script>
+    <script src="bookkeeping.js?v=1.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </body>
 </html>
