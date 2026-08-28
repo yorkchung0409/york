@@ -811,3 +811,35 @@ tbody tr.custom-row { background: rgba(247,201,107,0.06); }
   .bk-filter-bar { flex-wrap: wrap; }
   .bk-filter-bar select { flex: 1 1 30%; }
 }
+
+/* ========== 顶部图标按钮组 ========== */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(215, 240, 120, 0.08);
+  border: 1px solid rgba(215, 240, 120, 0.25);
+  border-radius: 10px;
+  color: #d7f078;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.icon-btn:hover {
+  background: rgba(215, 240, 120, 0.15);
+  border-color: rgba(215, 240, 120, 0.5);
+}
+.icon-btn:active {
+  transform: scale(0.95);
+}
+@media (max-width: 480px) {
+  .icon-btn { width: 32px; height: 32px; font-size: 16px; border-radius: 8px; }
+}
