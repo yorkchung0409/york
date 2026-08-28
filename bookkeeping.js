@@ -74,11 +74,9 @@
             const el = document.getElementById(id);
             if (el) { el.style.display = ''; }
           });
-          // 恢复 pool-mode-row 和 rule-note
+          // 恢复 pool-mode-row
           const poolRow = document.querySelector('.pool-mode-row');
           if (poolRow) poolRow.style.display = '';
-          const ruleNote = document.querySelector('.rule-note');
-          if (ruleNote) ruleNote.style.display = '';
         }
       });
     });
@@ -95,11 +93,9 @@
       if (el) { el.style.display = 'none'; }
     });
 
-    // 隐藏 pool-mode-row 和 rule-note
+    // 隐藏 pool-mode-row
     const poolRow = document.querySelector('.pool-mode-row');
     if (poolRow) poolRow.style.display = 'none';
-    const ruleNote = document.querySelector('.rule-note');
-    if (ruleNote) ruleNote.style.display = 'none';
 
     // 显示记账面板
     bkWorkspace.style.display = 'flex';
