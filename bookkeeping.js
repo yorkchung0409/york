@@ -823,37 +823,8 @@
     reader.readAsArrayBuffer(f);
   }
 
-  // ========== 强制刷新 ==========
-  function forceRefresh() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        // 先清除所有缓存
-        caches.keys().then(keys => {
-          return Promise.all(keys.map(key => caches.delete(key)));
-        }).then(() => {
-          if (reg) {
-            return reg.update();
-          }
-        }).then(() => {
-          // 强制刷新（绕过缓存）
-          window.location.href = window.location.pathname + '?v=' + Date.now();
-        }).catch(() => {
-          window.location.href = window.location.pathname + '?v=' + Date.now();
-        });
-      });
-    } else {
-      window.location.href = window.location.pathname + '?v=' + Date.now();
-    }
-  }
-
   // ========== 事件绑定 ==========
   function initEvents() {
-    // 强制刷新按钮
-    const refreshBtn = document.getElementById('forceRefreshBtn');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', forceRefresh);
-    }
-
     // 记一笔
     document.getElementById('bkAddRecordBtn').addEventListener('click', () => openRecordForm());
     document.getElementById('bkRecordClose').addEventListener('click', closeRecordForm);

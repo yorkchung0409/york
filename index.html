@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=1.0.7" />
+    <link rel="stylesheet" href="styles.css?v=1.0.8" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,12 +18,9 @@
         <div class="brand-lockup">
           <img class="brand-mark brand-icon" src="icons/icon-180-v38.png" alt="" />
           <div>
-          <p class="eyebrow">德州工具(V1.0.7)</p>
-            <h1>德州保险盈利计算器</h1>
+          <p class="eyebrow">德州工具(V1.0.8)</p>
+            <h1>德州计算器</h1>
           </div>
-        </div>
-        <div class="header-actions">
-          <button class="icon-btn" id="forceRefreshBtn" type="button" title="强制刷新到最新版">↻</button>
         </div>
       </header>
 
@@ -471,10 +468,12 @@
         <article class="panel bk-mgmt-panel">
           <div class="panel-heading compact-heading"><div><p class="section-kicker">数据管理</p><h3>导入导出</h3></div></div>
           <div class="bk-data-mgmt">
-            <button class="bk-mgmt-btn" id="bkExportBtn" type="button">导出数据</button>
+            <button class="bk-mgmt-btn" id="bkExportBtn" type="button">导出备份</button>
+            <button class="bk-mgmt-btn" id="bkImportBackupBtn" type="button">导入备份</button>
             <button class="bk-mgmt-btn" id="bkImportBtn" type="button">导入 Excel/CSV</button>
             <button class="bk-mgmt-btn bk-danger" id="bkClearBtn" type="button">清空数据</button>
           </div>
+          <input type="file" id="bkImportFile" accept=".json" style="display:none" />
         </article>
       </section>
     </main>
@@ -544,10 +543,10 @@
       </section>
     </div>
 
-    <script src="poker-core.js?v=1.0.7"></script>
-    <script src="app-hand-analysis.js?v=1.0.7"></script>
-    <script src="app.js?v=1.0.7"></script>
-    <script src="bookkeeping.js?v=1.0.7"></script>
+    <script src="poker-core.js?v=1.0.8"></script>
+    <script src="app-hand-analysis.js?v=1.0.8"></script>
+    <script src="app.js?v=1.0.8"></script>
+    <script src="bookkeeping.js?v=1.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </body>
 </html>

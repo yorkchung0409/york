@@ -717,7 +717,7 @@ function renderHandResults(result, players) {
     const stat = result.stats[player.key];
     return Math.max(max, stat.currentStatus === "领先" ? stat.lossCards.length : stat.winCards.length);
   }, 0);
-  els.handDeckStatus.textContent = `已知 ${result.knownCount} 张 · 剩余 ${result.remainingCount} 张${maxRelevant > 17 ? " · 超过保险表 17 outs 上限" : ""}`;
+  if (els.handDeckStatus) els.handDeckStatus.textContent = `已知 ${result.knownCount} 张 · 剩余 ${result.remainingCount} 张${maxRelevant > 17 ? " · 超过保险表 17 outs 上限" : ""}`;
   const resultCards = PLAYER_KEYS.map((key) => {
     const stat = result.stats[key];
     const equity = result.equities?.[key];
@@ -735,10 +735,12 @@ function renderHandResults(result, players) {
   }).join("");
   els.handAnalysisResults.innerHTML = `${resultCards}${renderHandCalculationSummary(result, players)}`;
   const autoBuyerAvailable = poolMode === "side" || result.currentLeaders.length === 1;
-  els.applyCalculatedOuts.disabled = !autoBuyerAvailable;
-  els.applyCalculatedOuts.textContent = autoBuyerAvailable
-    ? "↻ 重新计算 outs 并填入保险"
-    : "当前平局，暂无唯一保险购买者";
+  if (els.applyCalculatedOuts) {
+    els.applyCalculatedOuts.disabled = !autoBuyerAvailable;
+    els.applyCalculatedOuts.textContent = autoBuyerAvailable
+      ? "↻ 重新计算 outs 并填入保险"
+      : "当前平局，暂无唯一保险购买者";
+  }
 }
 
 function setHandApplyState(enabled, label = "⚡ 选择完成后，计算 outs 并填入保险") {
@@ -756,7 +758,7 @@ function clearHandResults(message = "请先选择公共牌和玩家手牌") {
     if (els.callAutoStatus) els.callAutoStatus.textContent = message;
     calculateCall();
   }
-  els.handDeckStatus.textContent = "选择牌面后点击计算 outs";
+  if (els.handDeckStatus) els.handDeckStatus.textContent = "选择牌面后点击计算 outs";
   els.handAnalysisResults.classList.add("is-empty");
   els.handAnalysisResults.innerHTML = `<div class="hand-empty-state">${message}</div>`;
   setHandApplyState(false);
@@ -765,7 +767,7 @@ function clearHandResults(message = "请先选择公共牌和玩家手牌") {
 function renderHandReadyState(board, players) {
   handAnalysis = null;
   const knownCount = board.filter(Boolean).length + players.reduce((total, player) => total + player.cards.filter(Boolean).length, 0);
-  els.handDeckStatus.textContent = `已选择 ${knownCount} 张牌 · 等待计算`;
+  if (els.handDeckStatus) els.handDeckStatus.textContent = `已选择 ${knownCount} 张牌 · 等待计算`;
   els.handAnalysisResults.classList.add("is-empty");
   els.handAnalysisResults.innerHTML = "";
   setHandApplyState(true, document.body.classList.contains("call-mode-active") ? "⚡ 根据牌面计算 equity" : "⚡ 计算 outs 并填入保险");
@@ -2274,7 +2276,7 @@ els.handStreet.addEventListener("change", () => {
   if (poolMode === "side") calculateSidePool({ capture: false });
   queueDraftSave();
 });
-els.applyCalculatedOuts.addEventListener("click", () => analyzeHandSituation(true));
+els.applyCalculatedOuts?.addEventListener("click", () => analyzeHandSituation(true));
 els.doubleRiverAdvance?.addEventListener("click", () => {
   // Legacy hidden control retained only for old deep links; street changes
   // now come from selecting 3/4/5 public cards directly.
