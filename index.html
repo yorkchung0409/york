@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=1.0.5" />
+    <link rel="stylesheet" href="styles.css?v=1.0.6" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,7 +18,7 @@
         <div class="brand-lockup">
           <img class="brand-mark brand-icon" src="icons/icon-180-v38.png" alt="" />
           <div>
-          <p class="eyebrow">德州工具(V1.0.5)</p>
+          <p class="eyebrow">德州工具(V1.0.6)</p>
             <h1>德州保险盈利计算器</h1>
           </div>
         </div>
@@ -43,10 +43,11 @@
       <section class="panel hand-panel" id="handPanel" aria-labelledby="handPanelTitle">
         <div class="panel-heading compact-heading">
           <div>
-            <p class="section-kicker">牌面分析</p>
             <h3 id="handPanelTitle">牌面与手牌</h3>
           </div>
-          <span class="currency-badge" id="handDeckStatus">选择牌面后自动计算 outs</span>
+          <div class="heading-actions">
+            <button class="icon-btn-sm" id="resetButton" type="button" title="恢复默认参数">↺</button>
+          </div>
         </div>
         <div class="hand-toolbar">
           <label class="field"><span>牌手数量</span><select id="handPlayerCount"><option value="2" selected>2 人池</option><option value="3">3 人池</option><option value="4">4 人池</option></select></label>
@@ -67,10 +68,6 @@
         <div class="hand-card-group">
           <div class="hand-group-heading"><strong>玩家手牌</strong><span id="playerHandHint">点击每位玩家的按钮选择两张底牌</span></div>
           <div class="player-hand-grid" id="playerHandInputs"></div>
-        </div>
-        <div class="hand-action-row">
-          <button class="secondary-action-button" id="autoRankFromHands" type="button" disabled>♛ 按已选手牌更新牌力排名</button>
-          <button class="hand-apply-button" id="applyCalculatedOuts" type="button" disabled>⚡ 选择完成后，计算 outs 并填入保险</button>
         </div>
         <div class="hand-analysis-results" id="handAnalysisResults" aria-live="polite">
           <div class="hand-empty-state">请先选择公共牌和玩家手牌</div>
@@ -148,13 +145,9 @@
           <article class="panel inputs-panel base-input-panel unified-base-panel" id="doubleBaseInputPanel">
             <div class="panel-heading compact-heading">
               <div>
-                <p class="section-kicker">保险方案</p>
-                <h3 id="insuranceWorkspaceTitle">统一保险工作区</h3>
+                <h3 id="insuranceWorkspaceTitle">底池和投入</h3>
               </div>
-              <div class="heading-actions">
-                <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
-                <button class="icon-btn-sm" id="resetButton" type="button" title="恢复默认参数">↺</button>
-              </div>
+              <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
             </div>
             <div class="field-grid">
               <label class="field">
@@ -180,19 +173,8 @@
           </article>
 
           <div class="double-stages-panel insurance-stage-panel" id="insuranceStreetConfig">
-            <div class="double-stages-heading">
-              <div>
-                <p class="section-kicker">保险配置</p>
-                <h3>转牌 / 河牌</h3>
-              </div>
-              <span>两张卡常显，可同时比较两街方案</span>
-            </div>
             <article class="panel stage-panel insurance-stage-card" id="turnStagePanel">
               <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">转牌</p>
-                  <h3>转牌保险</h3>
-                </div>
                 <div class="odds-readout">
                   <strong id="turnOddsValue">2.8x</strong>
                   <span>赔率</span>
@@ -219,10 +201,6 @@
 
             <article class="panel stage-panel double-river-stage insurance-stage-card" id="riverStagePanel">
               <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">河牌</p>
-                  <h3>河牌保险</h3>
-                </div>
                 <div class="odds-readout">
                   <strong id="riverOddsValue">3.5x</strong>
                   <span>赔率</span>
@@ -299,7 +277,6 @@
             <div class="table-heading">
               <div>
                 <p class="section-kicker">结算明细</p>
-                <h3>保险结果明细</h3>
               </div>
               <span class="table-note">爆保险时，该阶段买入本金不扣</span>
             </div>
@@ -364,10 +341,7 @@
                 <p class="section-kicker">CALL DECISION</p>
                 <h3 id="callTitle">胜率和赔率</h3>
               </div>
-              <div class="heading-actions">
-                <span class="currency-badge">我的视角</span>
-                <button class="icon-btn-sm" id="callResetButton" type="button" title="恢复默认参数" onclick="document.getElementById('resetButton').click()">↺</button>
-              </div>
+              <span class="currency-badge">我的视角</span>
             </div>
             <div class="call-source-selector" role="group" aria-label="outs 来源">
               <span>outs 来源</span>
@@ -564,10 +538,10 @@
       </section>
     </div>
 
-    <script src="poker-core.js?v=1.0.5"></script>
-    <script src="app-hand-analysis.js?v=1.0.5"></script>
-    <script src="app.js?v=1.0.5"></script>
-    <script src="bookkeeping.js?v=1.0.5"></script>
+    <script src="poker-core.js?v=1.0.6"></script>
+    <script src="app-hand-analysis.js?v=1.0.6"></script>
+    <script src="app.js?v=1.0.6"></script>
+    <script src="bookkeeping.js?v=1.0.6"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </body>
 </html>
