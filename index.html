@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=1.0.6" />
+    <link rel="stylesheet" href="styles.css?v=1.0.7" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,7 +18,7 @@
         <div class="brand-lockup">
           <img class="brand-mark brand-icon" src="icons/icon-180-v38.png" alt="" />
           <div>
-          <p class="eyebrow">德州工具(V1.0.6)</p>
+          <p class="eyebrow">德州工具(V1.0.7)</p>
             <h1>德州保险盈利计算器</h1>
           </div>
         </div>
@@ -43,7 +43,7 @@
       <section class="panel hand-panel" id="handPanel" aria-labelledby="handPanelTitle">
         <div class="panel-heading compact-heading">
           <div>
-            <h3 id="handPanelTitle">牌面与手牌</h3>
+            <p class="section-kicker">牌面与手牌</p>
           </div>
           <div class="heading-actions">
             <button class="icon-btn-sm" id="resetButton" type="button" title="恢复默认参数">↺</button>
@@ -145,7 +145,7 @@
           <article class="panel inputs-panel base-input-panel unified-base-panel" id="doubleBaseInputPanel">
             <div class="panel-heading compact-heading">
               <div>
-                <h3 id="insuranceWorkspaceTitle">底池和投入</h3>
+                <p class="section-kicker">底池和投入</p>
               </div>
               <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
             </div>
@@ -175,6 +175,9 @@
           <div class="double-stages-panel insurance-stage-panel" id="insuranceStreetConfig">
             <article class="panel stage-panel insurance-stage-card" id="turnStagePanel">
               <div class="panel-heading">
+                <div>
+                  <p class="section-kicker">转牌保险</p>
+                </div>
                 <div class="odds-readout">
                   <strong id="turnOddsValue">2.8x</strong>
                   <span>赔率</span>
@@ -201,6 +204,9 @@
 
             <article class="panel stage-panel double-river-stage insurance-stage-card" id="riverStagePanel">
               <div class="panel-heading">
+                <div>
+                  <p class="section-kicker">河牌保险</p>
+                </div>
                 <div class="odds-readout">
                   <strong id="riverOddsValue">3.5x</strong>
                   <span>赔率</span>
@@ -538,10 +544,10 @@
       </section>
     </div>
 
-    <script src="poker-core.js?v=1.0.6"></script>
-    <script src="app-hand-analysis.js?v=1.0.6"></script>
-    <script src="app.js?v=1.0.6"></script>
-    <script src="bookkeeping.js?v=1.0.6"></script>
+    <script src="poker-core.js?v=1.0.7"></script>
+    <script src="app-hand-analysis.js?v=1.0.7"></script>
+    <script src="app.js?v=1.0.7"></script>
+    <script src="bookkeeping.js?v=1.0.7"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </body>
 </html>
