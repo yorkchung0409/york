@@ -843,3 +843,33 @@ tbody tr.custom-row { background: rgba(247,201,107,0.06); }
 @media (max-width: 480px) {
   .icon-btn { width: 32px; height: 32px; font-size: 16px; border-radius: 8px; }
 }
+
+/* ========== 面板标题操作区 ========== */
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.icon-btn-sm {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(215, 240, 120, 0.08);
+  border: 1px solid rgba(215, 240, 120, 0.25);
+  border-radius: 8px;
+  color: #d7f078;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.icon-btn-sm:hover {
+  background: rgba(215, 240, 120, 0.15);
+  border-color: rgba(215, 240, 120, 0.5);
+}
+.icon-btn-sm:active {
+  transform: scale(0.95);
+}

@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 const CACHE_NAME = `poker-insurance-v${APP_VERSION}`;
 const APP_SHELL = [
   "./",

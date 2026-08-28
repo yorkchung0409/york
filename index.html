@@ -10,7 +10,7 @@
     <title>德州保险盈利计算器</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180-v38.png" />
-    <link rel="stylesheet" href="styles.css?v=1.0.4" />
+    <link rel="stylesheet" href="styles.css?v=1.0.5" />
   </head>
   <body>
     <main class="app-shell">
@@ -18,13 +18,12 @@
         <div class="brand-lockup">
           <img class="brand-mark brand-icon" src="icons/icon-180-v38.png" alt="" />
           <div>
-          <p class="eyebrow">德州工具(V1.0.4)</p>
+          <p class="eyebrow">德州工具(V1.0.5)</p>
             <h1>德州保险盈利计算器</h1>
           </div>
         </div>
         <div class="header-actions">
           <button class="icon-btn" id="forceRefreshBtn" type="button" title="强制刷新到最新版">↻</button>
-          <button class="icon-btn" id="resetButton" type="button" title="恢复默认参数">↺</button>
         </div>
       </header>
 
@@ -152,7 +151,10 @@
                 <p class="section-kicker">保险方案</p>
                 <h3 id="insuranceWorkspaceTitle">统一保险工作区</h3>
               </div>
-              <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
+              <div class="heading-actions">
+                <span class="currency-badge" id="insuranceStatusBadge">等待输入</span>
+                <button class="icon-btn-sm" id="resetButton" type="button" title="恢复默认参数">↺</button>
+              </div>
             </div>
             <div class="field-grid">
               <label class="field">
@@ -362,7 +364,10 @@
                 <p class="section-kicker">CALL DECISION</p>
                 <h3 id="callTitle">胜率和赔率</h3>
               </div>
-              <span class="currency-badge">我的视角</span>
+              <div class="heading-actions">
+                <span class="currency-badge">我的视角</span>
+                <button class="icon-btn-sm" id="callResetButton" type="button" title="恢复默认参数" onclick="document.getElementById('resetButton').click()">↺</button>
+              </div>
             </div>
             <div class="call-source-selector" role="group" aria-label="outs 来源">
               <span>outs 来源</span>
@@ -559,10 +564,10 @@
       </section>
     </div>
 
-    <script src="poker-core.js?v=1.0.4"></script>
-    <script src="app-hand-analysis.js?v=1.0.4"></script>
-    <script src="app.js?v=1.0.4"></script>
-    <script src="bookkeeping.js?v=1.0.4"></script>
+    <script src="poker-core.js?v=1.0.5"></script>
+    <script src="app-hand-analysis.js?v=1.0.5"></script>
+    <script src="app.js?v=1.0.5"></script>
+    <script src="bookkeeping.js?v=1.0.5"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </body>
 </html>
