@@ -111,12 +111,6 @@
     renderAll();
   }
 
-  // 当从记账切回保险时，恢复pool-mode-row
-  function restorePoolModeRow() {
-    const poolRow = document.querySelector('.pool-mode-row');
-    if (poolRow) poolRow.style.display = '';
-  }
-
   // ========== 统计 ==========
   function calcStats(records) {
     let sessions = records.length;

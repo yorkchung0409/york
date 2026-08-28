@@ -2159,25 +2159,25 @@ function copyDoubleResults() {
 bindOddsScale(els.oddsScale, els.range);
 bindOddsScale(els.turnScale, els.turnRange);
 bindOddsScale(els.riverScale, els.riverRange);
-els.range.addEventListener("input", calculateSingle);
-els.customBuy.addEventListener("input", calculateSingle);
-els.pot.addEventListener("input", () => {
+els.range?.addEventListener("input", calculateSingle);
+els.customBuy?.addEventListener("input", calculateSingle);
+els.pot?.addEventListener("input", () => {
   els.doublePot.value = els.pot.value;
   calculateSingle();
 });
-els.stake.addEventListener("input", () => {
+els.stake?.addEventListener("input", () => {
   els.doubleStake.value = els.stake.value;
   calculateSingle();
 });
-els.turnRange.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
-els.riverRange.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
-els.turnBuy.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
-els.riverBuy.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
-els.doublePot.addEventListener("input", () => {
+els.turnRange?.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
+els.riverRange?.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
+els.turnBuy?.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
+els.riverBuy?.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
+els.doublePot?.addEventListener("input", () => {
   els.pot.value = els.doublePot.value;
   calculateDouble();
 });
-els.doubleStake.addEventListener("input", () => {
+els.doubleStake?.addEventListener("input", () => {
   els.stake.value = els.doubleStake.value;
   calculateDouble();
 });
@@ -2205,7 +2205,7 @@ Object.values(els.sideBuyerEnabled).forEach((input) => {
     queueDraftSave();
   });
 });
-els.sidePotPanel.addEventListener("input", (event) => {
+els.sidePotPanel?.addEventListener("input", (event) => {
   const input = event.target.closest("[data-side-pot-input]");
   if (!input) return;
   if (input.dataset.sidePotInput.endsWith(":turnBuy") || input.dataset.sidePotInput.endsWith(":riverBuy")) {
@@ -2221,7 +2221,7 @@ els.sidePotPanel.addEventListener("input", (event) => {
   calculateSidePool();
   queueDraftSave();
 });
-els.sidePotPanel.addEventListener("click", (event) => {
+els.sidePotPanel?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-side-pot-ratio]");
   if (!button) return;
   const player = button.dataset.sidePlayer;
@@ -2246,7 +2246,7 @@ els.sidePotPanel.addEventListener("click", (event) => {
   calculateSidePool({ capture: false });
   queueDraftSave();
 });
-els.handPlayerCount.addEventListener("change", () => {
+els.handPlayerCount?.addEventListener("change", () => {
   updateHandPlayerVisibility();
   if (poolMode === "side") {
     const side = calculateSidePool();
@@ -2261,7 +2261,7 @@ els.handPlayerCount.addEventListener("change", () => {
   analyzeHandSituation(false);
   queueDraftSave();
 });
-els.handStreet.addEventListener("change", () => {
+els.handStreet?.addEventListener("change", () => {
   if (els.handStreet.value === "flop") {
     const turnInput = document.querySelector('[data-card-kind="board"][data-card-index="3"]');
     if (turnInput) turnInput.value = "";
@@ -2371,9 +2371,9 @@ els.callAnalyze?.addEventListener("click", () => {
   analyzeHandSituation(true);
   if (callSource === "auto") updateCallFromHands();
 });
-els.reset.addEventListener("click", reset);
-els.copy.addEventListener("click", copySingleResults);
-els.doubleCopy.addEventListener("click", copyDoubleResults);
+els.reset?.addEventListener("click", reset);
+els.copy?.addEventListener("click", copySingleResults);
+els.doubleCopy?.addEventListener("click", copyDoubleResults);
 els.modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
 els.poolModeButtons.forEach((button) => button.addEventListener("click", () => setPoolMode(button.dataset.poolMode)));
 document.querySelectorAll("[data-pot]").forEach((button) => {
