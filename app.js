@@ -18,6 +18,15 @@ const sidePoolLeaders = Core.sidePoolLeaders;
 const sideCoverageByPlayer = Core.sideCoverageByPlayer;
 const RATIOS = [1, 0.75, 0.5, 1 / 3];
 
+// 输入防抖：合并连续输入，避免每次按键都触发全量重算
+function debounce(fn, wait = 100) {
+  let timer = null;
+  return function (...args) {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
 const $ = (selector) => document.querySelector(selector);
 const els = {
   singleWorkspace: $("#singleWorkspace"),
@@ -916,8 +925,8 @@ function autoRankFromSelectedHands({ explicit = true } = {}) {
   groups.forEach((group, index) => group.keys.forEach((key) => { els.sideRankInputs[key].value = String(index + 1); }));
   const side = calculateSidePool();
   applyAutoSideBuyerState(side, board, players);
-  calculateSingle();
-  calculateDouble();
+  calculateSingle(side);
+  calculateDouble(side);
   els.sideRankNote.textContent = `已按当前牌面更新：${groups.map((group, index) => `${index + 1}名 ${group.keys.join("、")}`).join("；")}。`;
   queueDraftSave();
   return { board, players, side };
@@ -1809,11 +1818,11 @@ function applyAutoSideBuyerState(side, boardValues, players) {
   queueDraftSave();
 }
 
-function getBaseAmounts(potInput, stakeInput) {
+function getBaseAmounts(potInput, stakeInput, side) {
   if (poolMode === "side") {
-    const side = calculateSidePool();
-    const fallbackBuyer = PLAYER_KEYS.find((key) => side.coverageByPlayer[key] > 0) || "A";
-    return { pot: side.coverageByPlayer[fallbackBuyer], stake: side.effectiveStakes[fallbackBuyer] };
+    const current = side || calculateSidePool();
+    const fallbackBuyer = PLAYER_KEYS.find((key) => current.coverageByPlayer[key] > 0) || "A";
+    return { pot: current.coverageByPlayer[fallbackBuyer], stake: current.effectiveStakes[fallbackBuyer] };
   }
   return { pot: safeNumber(potInput), stake: safeNumber(stakeInput) };
 }
@@ -1832,9 +1841,9 @@ function singleRow(label, buy, noHit, hit, custom = false) {
   </tr>`;
 }
 
-function calculateSingle() {
+function calculateSingle(side) {
   const { outs, odds } = updateOddsControls(els.range, els.oddsScale, null, els.oddsValue, els.oddsHint, "保险");
-  const { pot, stake } = getBaseAmounts(els.pot, els.stake);
+  const { pot, stake } = getBaseAmounts(els.pot, els.stake, side);
   const hasAmounts = pot > 0 || stake > 0;
   const customBuy = boundedBuy(els.customBuy, odds > 0 ? pot / odds : 0);
   const mainWin = pot - stake;
@@ -1875,13 +1884,13 @@ function doubleRow(label, turnBuy, riverBuy, payout, net, hit = false) {
   </tr>`;
 }
 
-function calculateDouble() {
+function calculateDouble(side) {
   updateDoubleStageUI();
   const turn = updateOddsControls(els.turnRange, els.turnScale, els.turnOuts, els.turnOdds, els.turnHint, "转牌");
   const river = updateOddsControls(els.riverRange, els.riverScale, els.riverOuts, els.riverOdds, els.riverHint, "河牌");
   updateDoubleStageUI();
   const boardStreet = sideBoardStreet();
-  const { pot, stake } = getBaseAmounts(els.doublePot, els.doubleStake);
+  const { pot, stake } = getBaseAmounts(els.doublePot, els.doubleStake, side);
   const hasAmounts = pot > 0 || stake > 0;
   rememberInsuranceInputs(boardStreet);
   const historicalTurn = boardStreet >= 4 ? insuranceHistory.turn : null;
@@ -2159,43 +2168,43 @@ function copyDoubleResults() {
 bindOddsScale(els.oddsScale, els.range);
 bindOddsScale(els.turnScale, els.turnRange);
 bindOddsScale(els.riverScale, els.riverRange);
-els.range?.addEventListener("input", calculateSingle);
-els.customBuy?.addEventListener("input", calculateSingle);
-els.pot?.addEventListener("input", () => {
+els.range?.addEventListener("input", debounce(calculateSingle));
+els.customBuy?.addEventListener("input", debounce(calculateSingle));
+els.pot?.addEventListener("input", debounce(() => {
   els.doublePot.value = els.pot.value;
   calculateSingle();
-});
-els.stake?.addEventListener("input", () => {
+}));
+els.stake?.addEventListener("input", debounce(() => {
   els.doubleStake.value = els.stake.value;
   calculateSingle();
-});
-els.turnRange?.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
-els.riverRange?.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
-els.turnBuy?.addEventListener("input", () => { rememberEditedInsuranceStreet("turn"); calculateDouble(); });
-els.riverBuy?.addEventListener("input", () => { rememberEditedInsuranceStreet("river"); calculateDouble(); });
-els.doublePot?.addEventListener("input", () => {
+}));
+els.turnRange?.addEventListener("input", debounce(() => { rememberEditedInsuranceStreet("turn"); calculateDouble(); }));
+els.riverRange?.addEventListener("input", debounce(() => { rememberEditedInsuranceStreet("river"); calculateDouble(); }));
+els.turnBuy?.addEventListener("input", debounce(() => { rememberEditedInsuranceStreet("turn"); calculateDouble(); }));
+els.riverBuy?.addEventListener("input", debounce(() => { rememberEditedInsuranceStreet("river"); calculateDouble(); }));
+els.doublePot?.addEventListener("input", debounce(() => {
   els.pot.value = els.doublePot.value;
   calculateDouble();
-});
-els.doubleStake?.addEventListener("input", () => {
+}));
+els.doubleStake?.addEventListener("input", debounce(() => {
   els.stake.value = els.doubleStake.value;
   calculateDouble();
-});
+}));
 Object.values(els.sidePlayerInputs).forEach((input) => {
-  input.addEventListener("input", () => {
+  input.addEventListener("input", debounce(() => {
     updateHandPlayerVisibility();
-    calculateSidePool();
-    calculateSingle();
-    calculateDouble();
+    const side = calculateSidePool();
+    calculateSingle(side);
+    calculateDouble(side);
     analyzeHandSituation(false);
-  });
+  }));
 });
 Object.values(els.sideRankInputs).forEach((input) => {
   input.addEventListener("change", () => {
     sideRankManuallyEdited = true;
-    calculateSidePool();
-    calculateSingle();
-    calculateDouble();
+    const side = calculateSidePool();
+    calculateSingle(side);
+    calculateDouble(side);
     queueDraftSave();
   });
 });
@@ -2205,7 +2214,7 @@ Object.values(els.sideBuyerEnabled).forEach((input) => {
     queueDraftSave();
   });
 });
-els.sidePotPanel?.addEventListener("input", (event) => {
+els.sidePotPanel?.addEventListener("input", debounce((event) => {
   const input = event.target.closest("[data-side-pot-input]");
   if (!input) return;
   if (input.dataset.sidePotInput.endsWith(":turnBuy") || input.dataset.sidePotInput.endsWith(":riverBuy")) {
@@ -2220,7 +2229,7 @@ els.sidePotPanel?.addEventListener("input", (event) => {
   }
   calculateSidePool();
   queueDraftSave();
-});
+}));
 els.sidePotPanel?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-side-pot-ratio]");
   if (!button) return;
@@ -2255,8 +2264,8 @@ els.handPlayerCount?.addEventListener("change", () => {
     els.stake.value = side.effectiveStakes[fallbackBuyer];
     els.doublePot.value = side.coverageByPlayer[fallbackBuyer];
     els.doubleStake.value = side.effectiveStakes[fallbackBuyer];
-    calculateSingle();
-    calculateDouble();
+    calculateSingle(side);
+    calculateDouble(side);
   }
   analyzeHandSituation(false);
   queueDraftSave();
