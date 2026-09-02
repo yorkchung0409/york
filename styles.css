@@ -10,7 +10,7 @@
   --lime: #d7f078;
   --gold: #f7c96b;
   --coral: #fb9877;
-  --green: #8ce0a6;
+  --green: #4ade80;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
 }
 
@@ -63,9 +63,9 @@ h3 { margin: 0; font-family: "Noto Sans SC", sans-serif; font-size: 17px; line-h
 .mode-button.is-active { color: var(--bg-deep); background: var(--lime); font-weight: 700; }
 .pool-mode-row { display: flex; align-items: center; gap: 5px; width: max-content; margin: 0 0 16px; padding: 4px 5px; border: 1px solid var(--line); border-radius: 8px; background: rgba(3, 18, 13, 0.4); color: var(--muted-2); font-size: 11px; }
 .pool-mode-row > span { padding: 0 7px; }
-.pool-mode-button { border: 0; border-radius: 6px; padding: 7px 11px; color: var(--muted); background: transparent; font-size: 12px; }
+.pool-mode-button { border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; color: var(--muted); background: transparent; font-size: 12px; }
 .pool-mode-button:hover { color: var(--text); }
-.pool-mode-button.is-active { color: var(--bg-deep); background: rgba(215,240,120,0.92); font-weight: 700; }
+.pool-mode-button.is-active { color: var(--lime); background: rgba(215,240,120,0.08); border-color: rgba(215,240,120,0.55); font-weight: 700; }
 .hand-panel { margin-bottom: 20px; padding: 20px 22px; }
 .hand-panel .currency-badge { max-width: 220px; color: var(--muted-2); text-align: right; letter-spacing: 0; }
 .hand-toolbar { display: flex; align-items: end; gap: 10px; margin-top: 16px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
