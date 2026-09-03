@@ -718,7 +718,7 @@ tbody tr.custom-row { background: rgba(247,201,107,0.06); }
 .bk-stat-value { font-size: 18px; font-weight: 800; color: var(--gold); }
 .bk-stat-value.bk-positive { color: #27ae60; }
 .bk-stat-value.bk-negative { color: #e74c3c; }
-.bk-primary-btn { background: linear-gradient(180deg, var(--lime) 0%, #b8d45a 100%); color: var(--bg-deep); border: none; padding: 11px 18px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; }
+.bk-primary-btn { background: linear-gradient(180deg, var(--lime) 0%, #b8922e 100%); color: var(--bg-deep); border: none; padding: 11px 18px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; }
 .bk-primary-btn:active { opacity: 0.85; }
 .bk-filter-bar { display: flex; gap: 6px; }
 .bk-filter-bar select { flex: 1; min-width: 0; background: var(--felt); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 7px 4px; font-size: 11px; outline: none; appearance: none; text-align: center; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
